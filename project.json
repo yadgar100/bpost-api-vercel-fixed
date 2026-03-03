@@ -1,0 +1,22 @@
+{
+  "version": 2
+}
+```
+
+**Then redeploy!**
+
+---
+
+## 🧪 **STEP 4: Test These URLs Too**
+
+**Since function is called "api", try:**
+
+**URL 4:**
+```
+https://bpost-api.vercel.app/health
+```
+**What shows?**
+
+**URL 5:**
+```
+https://bpost-api.vercel.app/api/api/health
