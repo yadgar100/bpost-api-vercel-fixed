@@ -128,7 +128,8 @@ router.post('/employees', async (req, res) => {
             });
         }
 
-        const pool = await sql.connect();
+        // ✅ Correct - use app.locals
+const pool = await req.app.locals.getPool();
 
         // Check if email already exists
         const checkEmail = await pool.request()

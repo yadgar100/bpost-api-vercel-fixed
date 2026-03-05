@@ -11,7 +11,8 @@ const sql = require('mssql');
 // ============================================
 router.get('/locations', async (req, res) => {
     try {
-        const pool = await sql.connect();
+       // ✅ Correct - use app.locals
+const pool = await req.app.locals.getPool();
         
         const result = await pool.request().query(`
             SELECT 

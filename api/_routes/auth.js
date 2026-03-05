@@ -23,7 +23,8 @@ router.post('/auth/login', async (req, res) => {
             });
         }
 
-        const pool = await sql.connect();
+        // ✅ Correct - use app.locals
+const pool = await req.app.locals.getPool();
         
         const result = await pool.request()
             .input('email', sql.VarChar(100), email.toLowerCase())
