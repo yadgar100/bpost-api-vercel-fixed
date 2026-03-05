@@ -33,23 +33,23 @@ app.use(cors({
 // ============================================
 const dbConfig = {
     server: process.env.DB_SERVER,
+    port: 1433,                    // ← add this line
     database: process.env.DB_DATABASE,
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
-    connectionTimeout: 8000,   // ✅ FIX: Stay under Vercel's 10s timeout
-    requestTimeout: 8000,      // ✅ FIX: Same
+    connectionTimeout: 8000,
+    requestTimeout: 8000,
     options: {
-        encrypt: process.env.DB_ENCRYPT === 'true',
-        trustServerCertificate: process.env.DB_TRUST_SERVER_CERTIFICATE === 'true',
+        encrypt: false,            // ← must be false for site4now
+        trustServerCertificate: true,
         enableArithAbort: true
     },
     pool: {
-        max: 3,                // ✅ FIX: Lowered from 10 for serverless
+        max: 3,
         min: 0,
         idleTimeoutMillis: 30000
     }
 };
-
 // ============================================
 // Database Pool
 // ============================================
