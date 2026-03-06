@@ -27,9 +27,8 @@ router.post('/auth/login', async (req, res) => {
         if (!user.IsActive)
             return res.status(401).json({ success: false, error: 'Account is inactive. Please contact administrator.' });
 
-       // ✅
-	const isValidPassword = await bcrypt.compare(password, user.PasswordHash);
-if (!isValidPassword) {
+        const isValidPassword = await bcrypt.compare(password, user.PasswordHash);
+        if (!isValidPassword)
             return res.status(401).json({ success: false, error: 'Invalid email or password' });
 
         const token = jwt.sign(
@@ -69,7 +68,7 @@ router.post('/auth/verify', async (req, res) => {
 
         const decoded = jwt.verify(token, JWT_SECRET);
 
-        const pool = await req.app.locals.getPool();  // ✅ fixed
+        const pool = await req.app.locals.getPool();
         const result = await pool.request()
             .input('id', sql.Int, decoded.id)
             .query(`SELECT Id, EmployeeId, FirstName, LastName, Email,
