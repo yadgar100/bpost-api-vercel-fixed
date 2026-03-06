@@ -56,14 +56,14 @@ router.post('/employees', async (req, res) => {
             .input('firstName', sql.NVarChar(50), firstName)
             .input('lastName', sql.NVarChar(50), lastName)
             .input('email', sql.VarChar(100), email.toLowerCase())
-            .input('password', sql.NVarChar(100), password)
+            .input('passwordHash', sql.NVarChar(100), password)
             .input('department', sql.NVarChar(50), department || '')
             .input('position', sql.NVarChar(50), position || '')
             .input('hourlyRate', sql.Decimal(10, 2), hourlyRate || 0)
             .input('isAdmin', sql.Bit, isAdmin || false)
             .input('assignedLocations', sql.NVarChar(sql.MAX), JSON.stringify(assignedLocations || []))
-            .query(`INSERT INTO Employees (EmployeeId,FirstName,LastName,Email,Password,Department,Position,HourlyRate,IsAdmin,AssignedLocations,IsActive)
-                    OUTPUT INSERTED.* VALUES (@employeeId,@firstName,@lastName,@email,@password,@department,@position,@hourlyRate,@isAdmin,@assignedLocations,1)`);
+            .query(`INSERT INTO Employees (EmployeeId,FirstName,LastName,Email,PasswordHash,Department,Position,HourlyRate,IsAdmin,AssignedLocations,IsActive)
+                    OUTPUT INSERTED.* VALUES (@employeeId,@firstName,@lastName,@email,@passwordHash,@department,@position,@hourlyRate,@isAdmin,@assignedLocations,1)`);
         const newEmployee = result.recordset[0];
         newEmployee.AssignedLocations = JSON.parse(newEmployee.AssignedLocations);
         res.status(201).json({ success: true, employee: newEmployee, message: 'Employee created successfully' });

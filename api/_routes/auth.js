@@ -14,7 +14,7 @@ router.post('/auth/login', async (req, res) => {
         const pool = await req.app.locals.getPool();
         const result = await pool.request()
             .input('email', sql.VarChar(100), email.toLowerCase())
-            .query(`SELECT Id, EmployeeId, FirstName, LastName, Email, Password,
+            .query(`SELECT Id, EmployeeId, FirstName, LastName, Email, PasswordHash,
                            Department, Position, HourlyRate, IsAdmin, AssignedLocations, IsActive
                     FROM Employees WHERE LOWER(Email) = @email`);
 
@@ -26,7 +26,7 @@ router.post('/auth/login', async (req, res) => {
         if (!user.IsActive)
             return res.status(401).json({ success: false, error: 'Account is inactive. Please contact administrator.' });
 
-        if (user.Password !== password)
+        if (user.PasswordHash !== password)
             return res.status(401).json({ success: false, error: 'Invalid email or password' });
 
         const token = jwt.sign(
