@@ -1,3 +1,4 @@
+const bcrypt = require('bcryptjs');
 const express = require('express');
 const router = express.Router();
 const sql = require('mssql');
@@ -26,7 +27,9 @@ router.post('/auth/login', async (req, res) => {
         if (!user.IsActive)
             return res.status(401).json({ success: false, error: 'Account is inactive. Please contact administrator.' });
 
-        if (user.PasswordHash !== password)
+       // ✅
+	const isValidPassword = await bcrypt.compare(password, user.PasswordHash);
+if (!isValidPassword) {
             return res.status(401).json({ success: false, error: 'Invalid email or password' });
 
         const token = jwt.sign(
