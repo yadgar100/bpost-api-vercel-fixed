@@ -16,7 +16,7 @@ router.post('/auth/login', async (req, res) => {
         const result = await pool.request()
             .input('email', sql.VarChar(100), email.toLowerCase())
             .query(`SELECT Id, EmployeeId, FirstName, LastName, Email, PasswordHash,
-                           Department, Position, HourlyRate, IsAdmin, AssignedLocations, IsActive
+                           Department, Position, HourlyRate, IsAdmin, AssignedLocations, AdminPermissions, IsActive
                     FROM Employees WHERE LOWER(Email) = @email`);
 
         if (result.recordset.length === 0)
@@ -50,7 +50,8 @@ router.post('/auth/login', async (req, res) => {
                 position: user.Position,
                 hourlyRate: user.HourlyRate,
                 isAdmin: user.IsAdmin,
-                assignedLocations: user.AssignedLocations ? JSON.parse(user.AssignedLocations) : []
+                assignedLocations: user.AssignedLocations ? JSON.parse(user.AssignedLocations) : [],
+                adminPermissions: user.AdminPermissions ? JSON.parse(user.AdminPermissions) : {}
             }
         });
     } catch (error) {
@@ -72,7 +73,7 @@ router.post('/auth/verify', async (req, res) => {
         const result = await pool.request()
             .input('id', sql.Int, decoded.id)
             .query(`SELECT Id, EmployeeId, FirstName, LastName, Email,
-                           Department, Position, HourlyRate, IsAdmin, AssignedLocations, IsActive
+                           Department, Position, HourlyRate, IsAdmin, AssignedLocations, AdminPermissions, IsActive
                     FROM Employees WHERE Id = @id`);
 
         if (result.recordset.length === 0 || !result.recordset[0].IsActive)
@@ -91,7 +92,8 @@ router.post('/auth/verify', async (req, res) => {
                 position: user.Position,
                 hourlyRate: user.HourlyRate,
                 isAdmin: user.IsAdmin,
-                assignedLocations: user.AssignedLocations ? JSON.parse(user.AssignedLocations) : []
+                assignedLocations: user.AssignedLocations ? JSON.parse(user.AssignedLocations) : [],
+                adminPermissions: user.AdminPermissions ? JSON.parse(user.AdminPermissions) : {}
             }
         });
     } catch (error) {
