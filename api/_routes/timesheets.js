@@ -26,7 +26,7 @@ router.get('/timesheets', authenticateToken, async (req, res) => {
         let query;
         if (req.user.isAdmin == true || req.user.isAdmin == 1) {
             query = `
-                SELECT T.Id, T.EmployeeId, T.LocationId, T.Date, T.CheckInTime, T.CheckOutTime,
+                SELECT T.Id, T.EmployeeId, T.LocationId, T.Date, T.StartTime, T.FinishTime,
                        T.RegularHours, T.OvertimeHours, T.Status, T.Notes, T.CreatedAt, T.UpdatedAt,
                        E.FirstName, E.LastName, E.EmployeeId AS EmployeeCode, L.Name AS LocationName
                 FROM Timesheets T
@@ -36,7 +36,7 @@ router.get('/timesheets', authenticateToken, async (req, res) => {
         } else {
             request.input('empId', sql.Int, req.user.id);
             query = `
-                SELECT T.Id, T.EmployeeId, T.LocationId, T.Date, T.CheckInTime, T.CheckOutTime,
+                SELECT T.Id, T.EmployeeId, T.LocationId, T.Date, T.StartTime, T.FinishTime,
                        T.RegularHours, T.OvertimeHours, T.Status, T.Notes, T.CreatedAt, T.UpdatedAt,
                        E.FirstName, E.LastName, E.EmployeeId AS EmployeeCode, L.Name AS LocationName
                 FROM Timesheets T
@@ -57,7 +57,7 @@ router.get('/timesheets/pending', authenticateToken, async (req, res) => {
     try {
         const pool = await req.app.locals.getPool();
         const rows = await pool.request().query(`
-            SELECT T.Id, T.EmployeeId, T.LocationId, T.Date, T.CheckInTime, T.CheckOutTime,
+            SELECT T.Id, T.EmployeeId, T.LocationId, T.Date, T.StartTime, T.FinishTime,
                    T.RegularHours, T.OvertimeHours, T.Status, T.Notes, T.CreatedAt,
                    E.FirstName, E.LastName, E.EmployeeId AS EmployeeCode, L.Name AS LocationName
             FROM Timesheets T
@@ -77,12 +77,12 @@ router.get('/timesheets/employee/:employeeId', authenticateToken, async (req, re
         const rows = await pool.request()
             .input('employeeId', sql.Int, req.params.employeeId)
             .query(`
-                SELECT T.Id, T.EmployeeId, T.LocationId, T.Date, T.CheckInTime, T.CheckOutTime,
+                SELECT T.Id, T.EmployeeId, T.LocationId, T.Date, T.StartTime, T.FinishTime,
                        T.RegularHours, T.OvertimeHours, T.Status, T.Notes, T.CreatedAt, L.Name AS LocationName
                 FROM Timesheets T
                 LEFT JOIN WorkLocations L ON T.LocationId = L.Id
                 WHERE T.EmployeeId = @employeeId
-                ORDER BY T.Date DESC, T.CheckInTime DESC`);
+                ORDER BY T.Date DESC, T.StartTime DESC`);
         res.json({ success: true, timesheets: rows.recordset });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
@@ -95,7 +95,7 @@ router.get('/timesheets/:id', authenticateToken, async (req, res) => {
         const rows = await pool.request()
             .input('id', sql.Int, req.params.id)
             .query(`
-                SELECT T.Id, T.EmployeeId, T.LocationId, T.Date, T.CheckInTime, T.CheckOutTime,
+                SELECT T.Id, T.EmployeeId, T.LocationId, T.Date, T.StartTime, T.FinishTime,
                        T.RegularHours, T.OvertimeHours, T.Status, T.Notes, T.CreatedAt,
                        E.FirstName, E.LastName, E.EmployeeId AS EmployeeCode, L.Name AS LocationName
                 FROM Timesheets T
@@ -112,14 +112,14 @@ router.get('/timesheets/:id', authenticateToken, async (req, res) => {
 
 router.post('/timesheets', authenticateToken, async (req, res) => {
     try {
-        const { date, startTime, finishTime, checkInTime, checkOutTime,
+        const { date, startTime, finishTime, StartTime, FinishTime,
                 regularHours, overtimeHours, notes, locationId,
                 employeeId: bodyEmployeeId, status: bodyStatus } = req.body;
 
         const employeeId = (req.user.isAdmin == 1 || req.user.isAdmin == true) && bodyEmployeeId
             ? bodyEmployeeId : req.user.id;
-        const resolvedCheckIn = startTime || checkInTime || null;
-        const resolvedCheckOut = finishTime || checkOutTime || null;
+        const resolvedCheckIn = startTime || StartTime || null;
+        const resolvedCheckOut = finishTime || FinishTime || null;
 
         if (!date || !resolvedCheckIn)
             return res.status(400).json({ success: false, error: 'Missing required fields: date, startTime' });
@@ -128,8 +128,8 @@ router.post('/timesheets', authenticateToken, async (req, res) => {
         const request = pool.request()
             .input('employeeId', sql.Int, employeeId)
             .input('date', sql.Date, date)
-            .input('checkInTime', sql.VarChar(10), resolvedCheckIn)
-            .input('checkOutTime', sql.VarChar(10), resolvedCheckOut)
+            .input('StartTime', sql.VarChar(10), resolvedCheckIn)
+            .input('FinishTime', sql.VarChar(10), resolvedCheckOut)
             .input('regularHours', sql.Decimal(5, 2), regularHours || 0)
             .input('overtimeHours', sql.Decimal(5, 2), overtimeHours || 0)
             .input('notes', sql.NVarChar(500), notes || '')
@@ -138,13 +138,13 @@ router.post('/timesheets', authenticateToken, async (req, res) => {
         let insertQuery;
         if (locationId) {
             request.input('locationId', sql.Int, locationId);
-            insertQuery = `INSERT INTO Timesheets (EmployeeId, LocationId, Date, CheckInTime, CheckOutTime, RegularHours, OvertimeHours, Notes, Status)
+            insertQuery = `INSERT INTO Timesheets (EmployeeId, LocationId, Date, StartTime, FinishTime, RegularHours, OvertimeHours, Notes, Status)
                            OUTPUT INSERTED.*
-                           VALUES (@employeeId, @locationId, @date, @checkInTime, @checkOutTime, @regularHours, @overtimeHours, @notes, @status)`;
+                           VALUES (@employeeId, @locationId, @date, @StartTime, @FinishTime, @regularHours, @overtimeHours, @notes, @status)`;
         } else {
-            insertQuery = `INSERT INTO Timesheets (EmployeeId, Date, CheckInTime, CheckOutTime, RegularHours, OvertimeHours, Notes, Status)
+            insertQuery = `INSERT INTO Timesheets (EmployeeId, Date, StartTime, FinishTime, RegularHours, OvertimeHours, Notes, Status)
                            OUTPUT INSERTED.*
-                           VALUES (@employeeId, @date, @checkInTime, @checkOutTime, @regularHours, @overtimeHours, @notes, @status)`;
+                           VALUES (@employeeId, @date, @StartTime, @FinishTime, @regularHours, @overtimeHours, @notes, @status)`;
         }
 
         const inserted = await request.query(insertQuery);
@@ -157,7 +157,7 @@ router.post('/timesheets', authenticateToken, async (req, res) => {
 
 router.put('/timesheets/:id', authenticateToken, async (req, res) => {
     try {
-        const { status, notes, approvedBy, checkOutTime, regularHours, overtimeHours } = req.body;
+        const { status, notes, approvedBy, FinishTime, regularHours, overtimeHours } = req.body;
         const pool = await req.app.locals.getPool();
         const request = pool.request().input('id', sql.Int, req.params.id);
         const fields = [];
@@ -170,7 +170,7 @@ router.put('/timesheets/:id', authenticateToken, async (req, res) => {
             }
         }
         if (notes !== undefined) { fields.push('Notes = @notes'); request.input('notes', sql.NVarChar(500), notes); }
-        if (checkOutTime) { fields.push('CheckOutTime = @checkOutTime'); request.input('checkOutTime', sql.VarChar(10), checkOutTime); }
+        if (FinishTime) { fields.push('FinishTime = @FinishTime'); request.input('FinishTime', sql.VarChar(10), FinishTime); }
         if (regularHours !== undefined) { fields.push('RegularHours = @regularHours'); request.input('regularHours', sql.Decimal(5, 2), regularHours); }
         if (overtimeHours !== undefined) { fields.push('OvertimeHours = @overtimeHours'); request.input('overtimeHours', sql.Decimal(5, 2), overtimeHours); }
         fields.push('UpdatedAt = GETDATE()');
