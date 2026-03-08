@@ -165,8 +165,7 @@ router.put('/timesheets/:id', authenticateToken, async (req, res) => {
             fields.push('Status = @status');
             request.input('status', sql.VarChar(20), status);
             if (status === 'approved') {
-                fields.push('ApprovedBy = @approvedBy', 'ApprovedAt = GETDATE()');
-                request.input('approvedBy', sql.Int, approvedBy || req.user.id);
+                // ApprovedBy/ApprovedAt columns not in schema
             }
         }
         if (notes !== undefined) { fields.push('Notes = @notes'); request.input('notes', sql.NVarChar(500), notes); }
@@ -202,8 +201,7 @@ router.post('/timesheets/:id/approve', authenticateToken, async (req, res) => {
         const pool = await req.app.locals.getPool();
         const approved = await pool.request()
             .input('id', sql.Int, req.params.id)
-            .input('approvedBy', sql.Int, req.user.id)
-            .query(`UPDATE Timesheets SET Status='approved', ApprovedBy=@approvedBy, ApprovedAt=GETDATE(), UpdatedAt=GETDATE() OUTPUT INSERTED.* WHERE Id=@id`);
+            .query(`UPDATE Timesheets SET Status='approved', UpdatedAt=GETDATE() OUTPUT INSERTED.* WHERE Id=@id`);
         if (approved.recordset.length === 0)
             return res.status(404).json({ success: false, error: 'Timesheet not found' });
         res.json({ success: true, timesheet: approved.recordset[0], message: 'Approved' });
