@@ -26,10 +26,10 @@ router.get('/timesheets', authenticateToken, async (req, res) => {
         let query;
         let request = pool.request();
 
-        if (req.user.isAdmin) {
+        if (req.user.isAdmin == true || req.user.isAdmin == 1) {
             query = `
                 SELECT T.Id, T.EmployeeId, T.LocationId, T.Date, T.CheckInTime, T.CheckOutTime,
-                       T.RegularHours, T.OvertimeHours, T.Status, T.Notes, T.GPSCheckIn, T.GPSCheckOut,
+                       T.RegularHours, T.OvertimeHours, T.Status, T.Notes,
                        T.CreatedAt, T.UpdatedAt, E.FirstName, E.LastName, E.EmployeeId AS EmployeeCode,
                        L.Name AS LocationName, L.QRCode
                 FROM Timesheets T
@@ -41,7 +41,7 @@ router.get('/timesheets', authenticateToken, async (req, res) => {
             request.input('empId', sql.Int, req.user.id);
             query = `
                 SELECT T.Id, T.EmployeeId, T.LocationId, T.Date, T.CheckInTime, T.CheckOutTime,
-                       T.RegularHours, T.OvertimeHours, T.Status, T.Notes, T.GPSCheckIn, T.GPSCheckOut,
+                       T.RegularHours, T.OvertimeHours, T.Status, T.Notes,
                        T.CreatedAt, T.UpdatedAt, E.FirstName, E.LastName, E.EmployeeId AS EmployeeCode,
                        L.Name AS LocationName, L.QRCode
                 FROM Timesheets T
@@ -64,7 +64,7 @@ router.get('/timesheets/pending', authenticateToken, async (req, res) => {
         const pool = await req.app.locals.getPool();
         const result = await pool.request().query(`
             SELECT T.Id, T.EmployeeId, T.LocationId, T.Date, T.CheckInTime, T.CheckOutTime,
-                   T.RegularHours, T.OvertimeHours, T.Status, T.Notes, T.GPSCheckIn, T.GPSCheckOut,
+                   T.RegularHours, T.OvertimeHours, T.Status, T.Notes,
                    T.CreatedAt, E.FirstName, E.LastName, E.EmployeeId AS EmployeeCode,
                    L.Name AS LocationName, L.QRCode
             FROM Timesheets T
@@ -86,7 +86,7 @@ router.get('/timesheets/employee/:employeeId', authenticateToken, async (req, re
             .input('employeeId', sql.Int, req.params.employeeId)
             .query(`
                 SELECT T.Id, T.EmployeeId, T.LocationId, T.Date, T.CheckInTime, T.CheckOutTime,
-                       T.RegularHours, T.OvertimeHours, T.Status, T.Notes, T.GPSCheckIn, T.GPSCheckOut,
+                       T.RegularHours, T.OvertimeHours, T.Status, T.Notes,
                        T.CreatedAt, L.Name AS LocationName, L.QRCode
                 FROM Timesheets T
                 LEFT JOIN WorkLocations L ON T.LocationId = L.Id
@@ -133,7 +133,6 @@ router.post('/timesheets', authenticateToken, async (req, res) => {
             locationId,
             checkInLat, checkInLng,
             checkOutLat, checkOutLng,
-            gpsCheckIn, gpsCheckOut,
             // Admin manual entry
             employeeId: bodyEmployeeId,
             status: bodyStatus
@@ -147,27 +146,33 @@ router.post('/timesheets', authenticateToken, async (req, res) => {
         if (!date || !resolvedCheckIn)
             return res.status(400).json({ success: false, error: 'Missing required fields: date, startTime' });
 
-        // Build GPS strings
-        const gpsIn = gpsCheckIn || (checkInLat && checkInLng ? `${checkInLat},${checkInLng}` : '');
-        const gpsOut = gpsCheckOut || (checkOutLat && checkOutLng ? `${checkOutLat},${checkOutLng}` : '');
         const finalStatus = bodyStatus || 'pending';
 
         const pool = await req.app.locals.getPool();
         const result = await pool.request()
             .input('employeeId', sql.Int, employeeId)
-            .input('locationId', sql.Int, locationId || null)
             .input('date', sql.Date, date)
             .input('checkInTime', sql.VarChar(10), resolvedCheckIn)
             .input('checkOutTime', sql.VarChar(10), resolvedCheckOut)
             .input('regularHours', sql.Decimal(5, 2), regularHours || 0)
             .input('overtimeHours', sql.Decimal(5, 2), overtimeHours || 0)
             .input('notes', sql.NVarChar(500), notes || '')
-            .input('gpsCheckIn', sql.NVarChar(100), gpsIn)
-            .input('gpsCheckOut', sql.NVarChar(100), gpsOut)
-            .input('status', sql.VarChar(20), finalStatus)
-            .query(`INSERT INTO Timesheets (EmployeeId, LocationId, Date, CheckInTime, CheckOutTime, RegularHours, OvertimeHours, Notes, GPSCheckIn, GPSCheckOut, Status)
-                    OUTPUT INSERTED.*
-                    VALUES (@employeeId, @locationId, @date, @checkInTime, @checkOutTime, @regularHours, @overtimeHours, @notes, @gpsCheckIn, @gpsCheckOut, @status)`);
+            .input('status', sql.VarChar(20), finalStatus);
+
+        // Handle locationId separately - some DBs have NOT NULL constraint
+        let insertQuery;
+        if (locationId) {
+            request.input('locationId', sql.Int, locationId);
+            insertQuery = `INSERT INTO Timesheets (EmployeeId, LocationId, Date, CheckInTime, CheckOutTime, RegularHours, OvertimeHours, Notes, Status)
+                           OUTPUT INSERTED.*
+                           VALUES (@employeeId, @locationId, @date, @checkInTime, @checkOutTime, @regularHours, @overtimeHours, @notes, @status)`;
+        } else {
+            insertQuery = `INSERT INTO Timesheets (EmployeeId, Date, CheckInTime, CheckOutTime, RegularHours, OvertimeHours, Notes, Status)
+                           OUTPUT INSERTED.*
+                           VALUES (@employeeId, @date, @checkInTime, @checkOutTime, @regularHours, @overtimeHours, @notes, @status)`;
+        }
+
+        const result = await request.query(insertQuery);
 
         res.status(201).json({ success: true, timesheet: result.recordset[0], message: 'Timesheet created successfully' });
     } catch (error) {
