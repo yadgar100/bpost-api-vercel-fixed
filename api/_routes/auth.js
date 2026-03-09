@@ -128,9 +128,9 @@ router.post('/auth/register', async (req, res) => {
         if (checkEmail.recordset.length > 0)
             return res.status(400).json({ success: false, error: 'Email already exists' });
 
-        const countResult = await pool.request().query('SELECT COUNT(*) as count FROM Employees');
-        const count = countResult.recordset[0].count;
-        const employeeId = `EMP${String(count + 1).padStart(3, '0')}`;
+        const countResult = await pool.request().query("SELECT ISNULL(MAX(Id), 0) as maxId FROM Employees");
+        const maxId = countResult.recordset[0].maxId;
+        const employeeId = `EMP${String(maxId + 1).padStart(3, '0')}`;
 
         const passwordHash = await bcrypt.hash(password, 10);
 
