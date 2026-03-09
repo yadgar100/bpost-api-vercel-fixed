@@ -16,7 +16,8 @@ router.post('/auth/login', async (req, res) => {
         const result = await pool.request()
             .input('email', sql.VarChar(100), email.toLowerCase())
             .query(`SELECT Id, EmployeeId, FirstName, LastName, Email, PasswordHash,
-                           Department, Position, HourlyRate, IsAdmin, AssignedLocations, AdminPermissions, IsActive
+                           Department, Position, HourlyRate, IsAdmin, AssignedLocations, AdminPermissions, IsActive,
+                           Country, Currency
                     FROM Employees WHERE LOWER(Email) = @email`);
 
         if (result.recordset.length === 0)
@@ -51,7 +52,9 @@ router.post('/auth/login', async (req, res) => {
                 hourlyRate: user.HourlyRate,
                 isAdmin: user.IsAdmin,
                 assignedLocations: user.AssignedLocations ? JSON.parse(user.AssignedLocations) : [],
-                adminPermissions: user.AdminPermissions ? JSON.parse(user.AdminPermissions) : {}
+                adminPermissions: user.AdminPermissions ? JSON.parse(user.AdminPermissions) : {},
+                country: user.Country || '',
+                currency: user.Currency || 'GBP'
             }
         });
     } catch (error) {
@@ -73,7 +76,8 @@ router.post('/auth/verify', async (req, res) => {
         const result = await pool.request()
             .input('id', sql.Int, decoded.id)
             .query(`SELECT Id, EmployeeId, FirstName, LastName, Email,
-                           Department, Position, HourlyRate, IsAdmin, AssignedLocations, AdminPermissions, IsActive
+                           Department, Position, HourlyRate, IsAdmin, AssignedLocations, AdminPermissions, IsActive,
+                           Country, Currency
                     FROM Employees WHERE Id = @id`);
 
         if (result.recordset.length === 0 || !result.recordset[0].IsActive)
@@ -93,13 +97,83 @@ router.post('/auth/verify', async (req, res) => {
                 hourlyRate: user.HourlyRate,
                 isAdmin: user.IsAdmin,
                 assignedLocations: user.AssignedLocations ? JSON.parse(user.AssignedLocations) : [],
-                adminPermissions: user.AdminPermissions ? JSON.parse(user.AdminPermissions) : {}
+                adminPermissions: user.AdminPermissions ? JSON.parse(user.AdminPermissions) : {},
+                country: user.Country || '',
+                currency: user.Currency || 'GBP'
             }
         });
     } catch (error) {
         if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError')
             return res.status(401).json({ success: false, error: 'Invalid or expired token' });
         console.error('Verify error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+
+router.post('/auth/register', async (req, res) => {
+    try {
+        const { firstName, lastName, email, password, department, position } = req.body;
+        if (!firstName || !lastName || !email || !password)
+            return res.status(400).json({ success: false, error: 'First name, last name, email and password are required' });
+
+        if (password.length < 6)
+            return res.status(400).json({ success: false, error: 'Password must be at least 6 characters' });
+
+        const pool = await req.app.locals.getPool();
+
+        const checkEmail = await pool.request()
+            .input('email', sql.VarChar(100), email.toLowerCase())
+            .query('SELECT Id FROM Employees WHERE LOWER(Email) = @email');
+        if (checkEmail.recordset.length > 0)
+            return res.status(400).json({ success: false, error: 'Email already exists' });
+
+        const countResult = await pool.request().query('SELECT COUNT(*) as count FROM Employees');
+        const count = countResult.recordset[0].count;
+        const employeeId = `EMP${String(count + 1).padStart(3, '0')}`;
+
+        const passwordHash = await bcrypt.hash(password, 10);
+
+        const result = await pool.request()
+            .input('employeeId', sql.VarChar(20), employeeId)
+            .input('firstName', sql.NVarChar(50), firstName)
+            .input('lastName', sql.NVarChar(50), lastName)
+            .input('email', sql.VarChar(100), email.toLowerCase())
+            .input('passwordHash', sql.NVarChar(100), passwordHash)
+            .input('department', sql.NVarChar(50), department || '')
+            .input('position', sql.NVarChar(50), position || '')
+            .query(`INSERT INTO Employees (EmployeeId, FirstName, LastName, Email, PasswordHash, Department, Position, HourlyRate, IsAdmin, AssignedLocations, IsActive)
+                    OUTPUT INSERTED.*
+                    VALUES (@employeeId, @firstName, @lastName, @email, @passwordHash, @department, @position, 0, 0, '[]', 1)`);
+
+        const newUser = result.recordset[0];
+        const token = jwt.sign(
+            { id: newUser.Id, employeeId: newUser.EmployeeId, email: newUser.Email, isAdmin: newUser.IsAdmin },
+            JWT_SECRET,
+            { expiresIn: '7d' }
+        );
+
+        res.status(201).json({
+            success: true,
+            token,
+            user: {
+                id: newUser.Id,
+                employeeId: newUser.EmployeeId,
+                firstName: newUser.FirstName,
+                lastName: newUser.LastName,
+                email: newUser.Email,
+                department: newUser.Department || '',
+                position: newUser.Position || '',
+                hourlyRate: newUser.HourlyRate || 0,
+                isAdmin: newUser.IsAdmin,
+                assignedLocations: [],
+                adminPermissions: {},
+                country: newUser.Country || '',
+                currency: newUser.Currency || 'GBP'
+            }
+        });
+    } catch (error) {
+        console.error('Register error:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
