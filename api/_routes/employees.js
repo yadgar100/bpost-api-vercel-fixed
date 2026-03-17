@@ -8,7 +8,8 @@ router.get('/employees', async (req, res) => {
         const result = await pool.request().query(`
             SELECT Id, EmployeeId, FirstName, LastName, Email,
                    Department, Position, HourlyRate, IsAdmin,
-                   AssignedLocations, IsActive, CreatedAt, Country, Currency
+                   AssignedLocations, IsActive, CreatedAt,
+                   Country, Currency, StandardHours, OvertimeRate
             FROM Employees ORDER BY FirstName, LastName
         `);
         const employees = result.recordset.map(emp => ({
@@ -39,7 +40,7 @@ router.get('/employees/:id', async (req, res) => {
 
 router.post('/employees', async (req, res) => {
     try {
-        const { firstName, lastName, email, password, department, position, hourlyRate, isAdmin, assignedLocations, country, currency } = req.body;
+        const { firstName, lastName, email, password, department, position, hourlyRate, isAdmin, assignedLocations } = req.body;
         if (!firstName || !lastName || !email || !password)
             return res.status(400).json({ success: false, error: 'First name, last name, email, and password are required' });
         const pool = await req.app.locals.getPool();
@@ -62,10 +63,8 @@ router.post('/employees', async (req, res) => {
             .input('hourlyRate', sql.Decimal(10, 2), hourlyRate || 0)
             .input('isAdmin', sql.Bit, isAdmin || false)
             .input('assignedLocations', sql.NVarChar(sql.MAX), JSON.stringify(assignedLocations || []))
-            .input('country', sql.NVarChar(100), country || '')
-            .input('currency', sql.NVarChar(10), currency || 'GBP')
-            .query(`INSERT INTO Employees (EmployeeId,FirstName,LastName,Email,PasswordHash,Department,Position,HourlyRate,IsAdmin,AssignedLocations,IsActive,Country,Currency)
-                    OUTPUT INSERTED.* VALUES (@employeeId,@firstName,@lastName,@email,@passwordHash,@department,@position,@hourlyRate,@isAdmin,@assignedLocations,1,@country,@currency)`);
+            .query(`INSERT INTO Employees (EmployeeId,FirstName,LastName,Email,PasswordHash,Department,Position,HourlyRate,IsAdmin,AssignedLocations,IsActive)
+                    OUTPUT INSERTED.* VALUES (@employeeId,@firstName,@lastName,@email,@passwordHash,@department,@position,@hourlyRate,@isAdmin,@assignedLocations,1)`);
         const newEmployee = result.recordset[0];
         newEmployee.AssignedLocations = JSON.parse(newEmployee.AssignedLocations);
         res.status(201).json({ success: true, employee: newEmployee, message: 'Employee created successfully' });
@@ -76,7 +75,7 @@ router.post('/employees', async (req, res) => {
 
 router.put('/employees/:id', async (req, res) => {
     try {
-        const { firstName, lastName, email, department, position, hourlyRate, assignedLocations, isActive, country, currency } = req.body;
+        const { firstName, lastName, email, department, position, hourlyRate, assignedLocations, isActive, country, currency, standardHours, overtimeRate } = req.body;
         const pool = await req.app.locals.getPool();
         let updateFields = [];
         let request = pool.request().input('id', sql.Int, req.params.id);
@@ -90,6 +89,8 @@ router.put('/employees/:id', async (req, res) => {
         if (isActive !== undefined) { updateFields.push('IsActive = @isActive'); request.input('isActive', sql.Bit, isActive); }
         if (country !== undefined) { updateFields.push('Country = @country'); request.input('country', sql.NVarChar(100), country); }
         if (currency !== undefined) { updateFields.push('Currency = @currency'); request.input('currency', sql.NVarChar(10), currency); }
+        if (standardHours !== undefined) { updateFields.push('StandardHours = @standardHours'); request.input('standardHours', sql.Decimal(5,2), standardHours); }
+        if (overtimeRate !== undefined) { updateFields.push('OvertimeRate = @overtimeRate'); request.input('overtimeRate', sql.Decimal(5,2), overtimeRate); }
         if (updateFields.length === 0)
             return res.status(400).json({ success: false, error: 'No fields to update' });
         const result = await request.query(`UPDATE Employees SET ${updateFields.join(', ')} OUTPUT INSERTED.* WHERE Id = @id`);
