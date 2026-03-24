@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const sql = require('mssql');
+const bcrypt = require('bcryptjs');
 
 router.get('/employees', async (req, res) => {
     try {
@@ -49,15 +50,16 @@ router.post('/employees', async (req, res) => {
             .query('SELECT Id FROM Employees WHERE LOWER(Email) = @email');
         if (checkEmail.recordset.length > 0)
             return res.status(400).json({ success: false, error: 'Email already exists' });
-        const countResult = await pool.request().query('SELECT COUNT(*) as count FROM Employees');
-        const count = countResult.recordset[0].count;
-        const employeeId = isAdmin ? `ADM${String(count + 1).padStart(3, '0')}` : `EMP${String(count + 1).padStart(3, '0')}`;
+        const countResult = await pool.request().query("SELECT ISNULL(MAX(Id), 0) as maxId FROM Employees");
+        const maxId = countResult.recordset[0].maxId;
+        const employeeId = isAdmin ? `ADM${String(maxId + 1).padStart(3, '0')}` : `EMP${String(maxId + 1).padStart(3, '0')}`;
+        const passwordHash = await bcrypt.hash(password, 10);
         const result = await pool.request()
             .input('employeeId', sql.VarChar(20), employeeId)
             .input('firstName', sql.NVarChar(50), firstName)
             .input('lastName', sql.NVarChar(50), lastName)
             .input('email', sql.VarChar(100), email.toLowerCase())
-            .input('passwordHash', sql.NVarChar(100), password)
+            .input('passwordHash', sql.NVarChar(100), passwordHash)
             .input('department', sql.NVarChar(50), department || '')
             .input('position', sql.NVarChar(50), position || '')
             .input('hourlyRate', sql.Decimal(10, 2), hourlyRate || 0)
