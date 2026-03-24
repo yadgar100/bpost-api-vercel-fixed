@@ -96,11 +96,21 @@ router.put('/employees/:id', async (req, res) => {
         if (minimumHours !== undefined) { updateFields.push('MinimumHours = @minimumHours'); request.input('minimumHours', sql.Decimal(5,2), minimumHours); }
         if (isAdmin !== undefined) { updateFields.push('IsAdmin = @isAdmin'); request.input('isAdmin', sql.Bit, isAdmin ? 1 : 0); }
         if (adminPermissions !== undefined) { updateFields.push('AdminPermissions = @adminPermissions'); request.input('adminPermissions', sql.NVarChar(sql.MAX), JSON.stringify(adminPermissions)); }
-        if (password !== undefined && password !== '') { 
-            const bcrypt = require('bcryptjs');
+        if (password !== undefined && password !== '') {
+            // If currentPassword provided, verify it first
+            if (req.body.currentPassword) {
+                const empResult = await pool.request()
+                    .input('uid', sql.Int, req.params.id)
+                    .query('SELECT PasswordHash FROM Employees WHERE Id = @uid');
+                if (empResult.recordset.length === 0)
+                    return res.status(404).json({ success: false, error: 'Employee not found' });
+                const valid = await bcrypt.compare(req.body.currentPassword, empResult.recordset[0].PasswordHash);
+                if (!valid)
+                    return res.status(400).json({ success: false, error: 'Current password is incorrect' });
+            }
             const hash = await bcrypt.hash(password, 10);
-            updateFields.push('PasswordHash = @passwordHash'); 
-            request.input('passwordHash', sql.NVarChar(100), hash); 
+            updateFields.push('PasswordHash = @passwordHash');
+            request.input('passwordHash', sql.NVarChar(100), hash);
         }
         if (updateFields.length === 0)
             return res.status(400).json({ success: false, error: 'No fields to update' });
