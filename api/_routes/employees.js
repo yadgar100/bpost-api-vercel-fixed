@@ -9,7 +9,7 @@ router.get('/employees', async (req, res) => {
             SELECT Id, EmployeeId, FirstName, LastName, Email,
                    Department, Position, HourlyRate, IsAdmin,
                    AssignedLocations, IsActive, CreatedAt,
-                   Country, Currency, StandardHours, OvertimeRate, MinimumHours
+                   Country, Currency, StandardHours, OvertimeRate, MinimumHours, AdminPermissions
             FROM Employees ORDER BY FirstName, LastName
         `);
         const employees = result.recordset.map(emp => ({
@@ -75,7 +75,7 @@ router.post('/employees', async (req, res) => {
 
 router.put('/employees/:id', async (req, res) => {
     try {
-        const { firstName, lastName, email, department, position, hourlyRate, assignedLocations, isActive, country, currency, standardHours, overtimeRate, minimumHours } = req.body;
+        const { firstName, lastName, email, department, position, hourlyRate, assignedLocations, isActive, country, currency, standardHours, overtimeRate, minimumHours, isAdmin, adminPermissions, password } = req.body;
         const pool = await req.app.locals.getPool();
         let updateFields = [];
         let request = pool.request().input('id', sql.Int, req.params.id);
@@ -92,6 +92,14 @@ router.put('/employees/:id', async (req, res) => {
         if (standardHours !== undefined) { updateFields.push('StandardHours = @standardHours'); request.input('standardHours', sql.Decimal(5,2), standardHours); }
         if (overtimeRate !== undefined) { updateFields.push('OvertimeRate = @overtimeRate'); request.input('overtimeRate', sql.Decimal(5,2), overtimeRate); }
         if (minimumHours !== undefined) { updateFields.push('MinimumHours = @minimumHours'); request.input('minimumHours', sql.Decimal(5,2), minimumHours); }
+        if (isAdmin !== undefined) { updateFields.push('IsAdmin = @isAdmin'); request.input('isAdmin', sql.Bit, isAdmin ? 1 : 0); }
+        if (adminPermissions !== undefined) { updateFields.push('AdminPermissions = @adminPermissions'); request.input('adminPermissions', sql.NVarChar(sql.MAX), JSON.stringify(adminPermissions)); }
+        if (password !== undefined && password !== '') { 
+            const bcrypt = require('bcryptjs');
+            const hash = await bcrypt.hash(password, 10);
+            updateFields.push('PasswordHash = @passwordHash'); 
+            request.input('passwordHash', sql.NVarChar(100), hash); 
+        }
         if (updateFields.length === 0)
             return res.status(400).json({ success: false, error: 'No fields to update' });
         const result = await request.query(`UPDATE Employees SET ${updateFields.join(', ')} OUTPUT INSERTED.* WHERE Id = @id`);
