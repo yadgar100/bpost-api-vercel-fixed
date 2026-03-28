@@ -26,7 +26,8 @@ router.get('/timesheets', authenticateToken, async (req, res) => {
         let query;
         if (req.user.isAdmin == true || req.user.isAdmin == 1) {
             query = `
-                SELECT T.Id, T.EmployeeId, T.LocationId, T.Date, T.StartTime, T.FinishTime,
+                SELECT T.Id, T.EmployeeId, T.LocationId, T.CheckInLocation, T.CheckOutLocation,
+                       T.Date, T.StartTime, T.FinishTime,
                        T.RegularHours, T.OvertimeHours, T.Status, T.Notes, T.CreatedAt, T.UpdatedAt,
                        E.FirstName, E.LastName, E.EmployeeId AS EmployeeCode, L.Name AS LocationName
                 FROM Timesheets T
@@ -36,7 +37,8 @@ router.get('/timesheets', authenticateToken, async (req, res) => {
         } else {
             request.input('empId', sql.Int, req.user.id);
             query = `
-                SELECT T.Id, T.EmployeeId, T.LocationId, T.Date, T.StartTime, T.FinishTime,
+                SELECT T.Id, T.EmployeeId, T.LocationId, T.CheckInLocation, T.CheckOutLocation,
+                       T.Date, T.StartTime, T.FinishTime,
                        T.RegularHours, T.OvertimeHours, T.Status, T.Notes, T.CreatedAt, T.UpdatedAt,
                        E.FirstName, E.LastName, E.EmployeeId AS EmployeeCode, L.Name AS LocationName
                 FROM Timesheets T
@@ -57,7 +59,8 @@ router.get('/timesheets/pending', authenticateToken, async (req, res) => {
     try {
         const pool = await req.app.locals.getPool();
         const rows = await pool.request().query(`
-            SELECT T.Id, T.EmployeeId, T.LocationId, T.Date, T.StartTime, T.FinishTime,
+            SELECT T.Id, T.EmployeeId, T.LocationId, T.CheckInLocation, T.CheckOutLocation,
+                   T.Date, T.StartTime, T.FinishTime,
                    T.RegularHours, T.OvertimeHours, T.Status, T.Notes, T.CreatedAt,
                    E.FirstName, E.LastName, E.EmployeeId AS EmployeeCode, L.Name AS LocationName
             FROM Timesheets T
@@ -77,7 +80,8 @@ router.get('/timesheets/employee/:employeeId', authenticateToken, async (req, re
         const rows = await pool.request()
             .input('employeeId', sql.Int, req.params.employeeId)
             .query(`
-                SELECT T.Id, T.EmployeeId, T.LocationId, T.Date, T.StartTime, T.FinishTime,
+                SELECT T.Id, T.EmployeeId, T.LocationId, T.CheckInLocation, T.CheckOutLocation,
+                       T.Date, T.StartTime, T.FinishTime,
                        T.RegularHours, T.OvertimeHours, T.Status, T.Notes, T.CreatedAt, L.Name AS LocationName
                 FROM Timesheets T
                 LEFT JOIN WorkLocations L ON T.LocationId = L.Id
@@ -95,7 +99,8 @@ router.get('/timesheets/:id', authenticateToken, async (req, res) => {
         const rows = await pool.request()
             .input('id', sql.Int, req.params.id)
             .query(`
-                SELECT T.Id, T.EmployeeId, T.LocationId, T.Date, T.StartTime, T.FinishTime,
+                SELECT T.Id, T.EmployeeId, T.LocationId, T.CheckInLocation, T.CheckOutLocation,
+                       T.Date, T.StartTime, T.FinishTime,
                        T.RegularHours, T.OvertimeHours, T.Status, T.Notes, T.CreatedAt,
                        E.FirstName, E.LastName, E.EmployeeId AS EmployeeCode, L.Name AS LocationName
                 FROM Timesheets T
