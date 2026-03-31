@@ -119,6 +119,7 @@ router.post('/timesheets', authenticateToken, async (req, res) => {
     try {
         const { date, startTime, finishTime, StartTime, FinishTime,
                 regularHours, overtimeHours, notes, locationId,
+                checkInLocation, checkOutLocation,
                 employeeId: bodyEmployeeId, status: bodyStatus } = req.body;
 
         const employeeId = (req.user.isAdmin == 1 || req.user.isAdmin == true) && bodyEmployeeId
@@ -138,18 +139,20 @@ router.post('/timesheets', authenticateToken, async (req, res) => {
             .input('regularHours', sql.Decimal(5, 2), regularHours || 0)
             .input('overtimeHours', sql.Decimal(5, 2), overtimeHours || 0)
             .input('notes', sql.NVarChar(500), notes || '')
-            .input('status', sql.VarChar(20), bodyStatus || 'pending');
+            .input('status', sql.VarChar(20), bodyStatus || 'pending')
+            .input('checkInLocation', sql.NVarChar(200), checkInLocation || null)
+            .input('checkOutLocation', sql.NVarChar(200), checkOutLocation || null);
 
         let insertQuery;
         if (locationId) {
             request.input('locationId', sql.Int, locationId);
-            insertQuery = `INSERT INTO Timesheets (EmployeeId, LocationId, Date, StartTime, FinishTime, RegularHours, OvertimeHours, Notes, Status)
+            insertQuery = `INSERT INTO Timesheets (EmployeeId, LocationId, Date, StartTime, FinishTime, RegularHours, OvertimeHours, Notes, Status, CheckInLocation, CheckOutLocation)
                            OUTPUT INSERTED.*
-                           VALUES (@employeeId, @locationId, @date, @StartTime, @FinishTime, @regularHours, @overtimeHours, @notes, @status)`;
+                           VALUES (@employeeId, @locationId, @date, @StartTime, @FinishTime, @regularHours, @overtimeHours, @notes, @status, @checkInLocation, @checkOutLocation)`;
         } else {
-            insertQuery = `INSERT INTO Timesheets (EmployeeId, Date, StartTime, FinishTime, RegularHours, OvertimeHours, Notes, Status)
+            insertQuery = `INSERT INTO Timesheets (EmployeeId, Date, StartTime, FinishTime, RegularHours, OvertimeHours, Notes, Status, CheckInLocation, CheckOutLocation)
                            OUTPUT INSERTED.*
-                           VALUES (@employeeId, @date, @StartTime, @FinishTime, @regularHours, @overtimeHours, @notes, @status)`;
+                           VALUES (@employeeId, @date, @StartTime, @FinishTime, @regularHours, @overtimeHours, @notes, @status, @checkInLocation, @checkOutLocation)`;
         }
 
         const inserted = await request.query(insertQuery);
