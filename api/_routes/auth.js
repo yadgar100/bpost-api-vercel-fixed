@@ -113,7 +113,7 @@ router.post('/auth/verify', async (req, res) => {
 
 router.post('/auth/register', async (req, res) => {
     try {
-        const { firstName, lastName, email, password, department, position } = req.body;
+        const { firstName, lastName, email, password, department, position, country } = req.body;
         if (!firstName || !lastName || !email || !password)
             return res.status(400).json({ success: false, error: 'First name, last name, email and password are required' });
 
@@ -142,9 +142,10 @@ router.post('/auth/register', async (req, res) => {
             .input('passwordHash', sql.NVarChar(100), passwordHash)
             .input('department', sql.NVarChar(50), department || '')
             .input('position', sql.NVarChar(50), position || '')
-            .query(`INSERT INTO Employees (EmployeeId, FirstName, LastName, Email, PasswordHash, Department, Position, HourlyRate, IsAdmin, AssignedLocations, IsActive)
+            .input('country', sql.NVarChar(50), country || '')
+            .query(`INSERT INTO Employees (EmployeeId, FirstName, LastName, Email, PasswordHash, Department, Position, Country, HourlyRate, IsAdmin, AssignedLocations, IsActive)
                     OUTPUT INSERTED.*
-                    VALUES (@employeeId, @firstName, @lastName, @email, @passwordHash, @department, @position, 0, 0, '[]', 1)`);
+                    VALUES (@employeeId, @firstName, @lastName, @email, @passwordHash, @department, @position, @country, 0, 0, '[]', 1)`);
 
         const newUser = result.recordset[0];
         const token = jwt.sign(
