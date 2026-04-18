@@ -26,8 +26,7 @@ router.get('/timesheets', authenticateToken, async (req, res) => {
         let query;
         if (req.user.isAdmin == true || req.user.isAdmin == 1) {
             query = `
-                SELECT T.Id, T.EmployeeId, T.LocationId, T.CheckInLocation, T.CheckOutLocation, T.BreakMinutes,
-                       T.Date, T.StartTime, T.FinishTime,
+                SELECT T.Id, T.EmployeeId, T.LocationId, T.CheckInLocation, T.CheckOutLocation, T.BreakMinutes, T.Date, T.StartTime, T.FinishTime,
                        T.RegularHours, T.OvertimeHours, T.Status, T.Notes, T.CreatedAt, T.UpdatedAt,
                        E.FirstName, E.LastName, E.EmployeeId AS EmployeeCode, L.Name AS LocationName
                 FROM Timesheets T
@@ -37,8 +36,7 @@ router.get('/timesheets', authenticateToken, async (req, res) => {
         } else {
             request.input('empId', sql.Int, req.user.id);
             query = `
-                SELECT T.Id, T.EmployeeId, T.LocationId, T.CheckInLocation, T.CheckOutLocation, T.BreakMinutes,
-                       T.Date, T.StartTime, T.FinishTime,
+                SELECT T.Id, T.EmployeeId, T.LocationId, T.CheckInLocation, T.CheckOutLocation, T.BreakMinutes, T.Date, T.StartTime, T.FinishTime,
                        T.RegularHours, T.OvertimeHours, T.Status, T.Notes, T.CreatedAt, T.UpdatedAt,
                        E.FirstName, E.LastName, E.EmployeeId AS EmployeeCode, L.Name AS LocationName
                 FROM Timesheets T
@@ -59,8 +57,7 @@ router.get('/timesheets/pending', authenticateToken, async (req, res) => {
     try {
         const pool = await req.app.locals.getPool();
         const rows = await pool.request().query(`
-            SELECT T.Id, T.EmployeeId, T.LocationId, T.CheckInLocation, T.CheckOutLocation, T.BreakMinutes,
-                       T.Date, T.StartTime, T.FinishTime,
+            SELECT T.Id, T.EmployeeId, T.LocationId, T.CheckInLocation, T.CheckOutLocation, T.BreakMinutes, T.Date, T.StartTime, T.FinishTime,
                    T.RegularHours, T.OvertimeHours, T.Status, T.Notes, T.CreatedAt,
                    E.FirstName, E.LastName, E.EmployeeId AS EmployeeCode, L.Name AS LocationName
             FROM Timesheets T
@@ -80,8 +77,7 @@ router.get('/timesheets/employee/:employeeId', authenticateToken, async (req, re
         const rows = await pool.request()
             .input('employeeId', sql.Int, req.params.employeeId)
             .query(`
-                SELECT T.Id, T.EmployeeId, T.LocationId, T.CheckInLocation, T.CheckOutLocation, T.BreakMinutes,
-                       T.Date, T.StartTime, T.FinishTime,
+                SELECT T.Id, T.EmployeeId, T.LocationId, T.CheckInLocation, T.CheckOutLocation, T.BreakMinutes, T.Date, T.StartTime, T.FinishTime,
                        T.RegularHours, T.OvertimeHours, T.Status, T.Notes, T.CreatedAt, L.Name AS LocationName
                 FROM Timesheets T
                 LEFT JOIN WorkLocations L ON T.LocationId = L.Id
@@ -99,8 +95,7 @@ router.get('/timesheets/:id', authenticateToken, async (req, res) => {
         const rows = await pool.request()
             .input('id', sql.Int, req.params.id)
             .query(`
-                SELECT T.Id, T.EmployeeId, T.LocationId, T.CheckInLocation, T.CheckOutLocation, T.BreakMinutes,
-                       T.Date, T.StartTime, T.FinishTime,
+                SELECT T.Id, T.EmployeeId, T.LocationId, T.CheckInLocation, T.CheckOutLocation, T.BreakMinutes, T.Date, T.StartTime, T.FinishTime,
                        T.RegularHours, T.OvertimeHours, T.Status, T.Notes, T.CreatedAt,
                        E.FirstName, E.LastName, E.EmployeeId AS EmployeeCode, L.Name AS LocationName
                 FROM Timesheets T
@@ -130,7 +125,14 @@ router.post('/timesheets', authenticateToken, async (req, res) => {
         if (!date || !resolvedCheckIn)
             return res.status(400).json({ success: false, error: 'Missing required fields: date, startTime' });
 
+        // Prevent duplicate submissions for the same employee on the same date
         const pool = await req.app.locals.getPool();
+        const dupCheck = await pool.request()
+            .input('dupEmployeeId', sql.Int, employeeId)
+            .input('dupDate', sql.Date, date)
+            .query('SELECT Id FROM Timesheets WHERE EmployeeId = @dupEmployeeId AND Date = @dupDate');
+        if (dupCheck.recordset.length > 0)
+            return res.status(409).json({ success: false, error: 'A timesheet for this date has already been submitted. Please contact your administrator if you need to make changes.' });
         const request = pool.request()
             .input('employeeId', sql.Int, employeeId)
             .input('date', sql.Date, date)
