@@ -76,6 +76,7 @@ const locationRoutes = require('./_routes/locations');
 const timesheetRoutes = require('./_routes/timesheets');
 const adjustmentRoutes = require('./_routes/adjustments');
 const vehicleRoutes = require('./_routes/vehicles');
+const expenseRoutes = require('./_routes/expenses');
 
 // ============================================
 // API Routes
@@ -86,6 +87,7 @@ app.use('/api', locationRoutes);
 app.use('/api', timesheetRoutes);
 app.use('/api', adjustmentRoutes);
 app.use('/api', vehicleRoutes);
+app.use('/api', expenseRoutes);
 
 // ============================================
 // Health Check
