@@ -27,7 +27,7 @@ router.get('/expenses', authenticateToken, async (req, res) => {
         if (req.user.isAdmin == true || req.user.isAdmin == 1) {
             query = `
                 SELECT E.Id, E.EmployeeId, E.Date, E.Category, E.Description,
-                       E.Amount, E.Currency, E.ReceiptNote, E.Status,
+                       E.Amount, E.Currency, E.ReceiptNote, E.ReceiptImage, E.Status,
                        E.PaidAt, E.PaidBy, E.Notes, E.CreatedAt, E.UpdatedAt,
                        EMP.FirstName, EMP.LastName, EMP.EmployeeId AS EmployeeCode
                 FROM ExpenseClaims E
@@ -37,7 +37,7 @@ router.get('/expenses', authenticateToken, async (req, res) => {
             request.input('empId', sql.Int, req.user.id);
             query = `
                 SELECT E.Id, E.EmployeeId, E.Date, E.Category, E.Description,
-                       E.Amount, E.Currency, E.ReceiptNote, E.Status,
+                       E.Amount, E.Currency, E.ReceiptNote, E.ReceiptImage, E.Status,
                        E.PaidAt, E.PaidBy, E.Notes, E.CreatedAt, E.UpdatedAt,
                        EMP.FirstName, EMP.LastName, EMP.EmployeeId AS EmployeeCode
                 FROM ExpenseClaims E
@@ -56,7 +56,7 @@ router.get('/expenses', authenticateToken, async (req, res) => {
 // POST create expense claim
 router.post('/expenses', authenticateToken, async (req, res) => {
     try {
-        const { date, category, description, amount, currency, receiptNote, employeeId: bodyEmpId } = req.body;
+        const { date, category, description, amount, currency, receiptNote, receiptImage, employeeId: bodyEmpId } = req.body;
         const employeeId = (req.user.isAdmin == 1 || req.user.isAdmin == true) && bodyEmpId
             ? bodyEmpId : req.user.id;
 
@@ -72,10 +72,11 @@ router.post('/expenses', authenticateToken, async (req, res) => {
             .input('amount', sql.Decimal(10, 2), parseFloat(amount))
             .input('currency', sql.NVarChar(10), currency || 'GBP')
             .input('receiptNote', sql.NVarChar(200), receiptNote || '')
+            .input('receiptImage', sql.NVarChar(sql.MAX), receiptImage || null)
             .query(`
-                INSERT INTO ExpenseClaims (EmployeeId, Date, Category, Description, Amount, Currency, ReceiptNote, Status)
+                INSERT INTO ExpenseClaims (EmployeeId, Date, Category, Description, Amount, Currency, ReceiptNote, ReceiptImage, Status)
                 OUTPUT INSERTED.*
-                VALUES (@employeeId, @date, @category, @description, @amount, @currency, @receiptNote, 'pending')`);
+                VALUES (@employeeId, @date, @category, @description, @amount, @currency, @receiptNote, @receiptImage, 'pending')`);
 
         res.status(201).json({ success: true, expense: inserted.recordset[0], message: 'Expense submitted successfully' });
     } catch (error) {
@@ -105,6 +106,7 @@ router.put('/expenses/:id', authenticateToken, async (req, res) => {
         if (description !== undefined) { fields.push('Description = @description'); request.input('description', sql.NVarChar(500), description); }
         if (amount !== undefined) { fields.push('Amount = @amount'); request.input('amount', sql.Decimal(10, 2), parseFloat(amount)); }
         if (receiptNote !== undefined) { fields.push('ReceiptNote = @receiptNote'); request.input('receiptNote', sql.NVarChar(200), receiptNote); }
+        if (req.body.receiptImage !== undefined) { fields.push('ReceiptImage = @receiptImage'); request.input('receiptImage', sql.NVarChar(sql.MAX), req.body.receiptImage); }
         fields.push('UpdatedAt = GETDATE()');
 
         const updated = await request.query(
