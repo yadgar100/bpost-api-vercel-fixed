@@ -52,7 +52,7 @@ router.get('/agents', authenticateToken, async (req, res) => {
 // GET agents assigned to the current employee
 router.get('/agents/my', authenticateToken, async (req, res) => {
     try {
-      
+        const pool = await req.app.locals.getPool();
         const rows = await pool.request()
             .input('empId', sql.Int, req.user.id)
             .query(`
