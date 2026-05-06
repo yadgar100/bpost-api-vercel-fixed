@@ -153,7 +153,7 @@ router.get('/agent-collections', authenticateToken, async (req, res) => {
         let query;
         if (req.user.isAdmin == true || req.user.isAdmin == 1) {
             query = `
-                SELECT C.*, A.AgentCode, A.City,
+                SELECT C.Id, C.EmployeeId, C.AgentId, C.Date, C.FromCode, C.ToCode, C.AmountCollected, C.AmountPaid, C.BankAmount, C.BoxesQty, C.Currency, C.Notes, C.CreatedAt, C.UpdatedAt, A.AgentCode, A.City,
                        E.FirstName, E.LastName, E.EmployeeId AS EmployeeCode
                 FROM AgentCollections C
                 INNER JOIN Agents A ON C.AgentId = A.Id
@@ -162,7 +162,7 @@ router.get('/agent-collections', authenticateToken, async (req, res) => {
         } else {
             request.input('empId', sql.Int, req.user.id);
             query = `
-                SELECT C.*, A.AgentCode, A.City,
+                SELECT C.Id, C.EmployeeId, C.AgentId, C.Date, C.FromCode, C.ToCode, C.AmountCollected, C.AmountPaid, C.BankAmount, C.BoxesQty, C.Currency, C.Notes, C.CreatedAt, C.UpdatedAt, A.AgentCode, A.City,
                        E.FirstName, E.LastName, E.EmployeeId AS EmployeeCode
                 FROM AgentCollections C
                 INNER JOIN Agents A ON C.AgentId = A.Id
@@ -180,7 +180,7 @@ router.get('/agent-collections', authenticateToken, async (req, res) => {
 // POST create collection record
 router.post('/agent-collections', authenticateToken, async (req, res) => {
     try {
-        const { agentId, date, fromCode, toCode, amountCollected, amountPaid, boxesQty, currency, notes } = req.body;
+        const { agentId, date, fromCode, toCode, amountCollected, amountPaid, bankAmount, boxesQty, currency, notes } = req.body;
         if (!agentId || amountCollected === undefined) return res.status(400).json({ success: false, error: 'Agent and amount collected are required' });
         const pool = await req.app.locals.getPool();
         const inserted = await pool.request()
@@ -191,12 +191,13 @@ router.post('/agent-collections', authenticateToken, async (req, res) => {
             .input('toCode', sql.NVarChar(30), toCode || '')
             .input('amountCollected', sql.Decimal(12,2), parseFloat(amountCollected) || 0)
             .input('amountPaid', sql.Decimal(12,2), parseFloat(amountPaid) || 0)
+            .input('bankAmount', sql.Decimal(12,2), parseFloat(bankAmount) || 0)
             .input('boxesQty', sql.Int, parseInt(boxesQty) || 0)
             .input('currency', sql.NVarChar(10), currency || 'GBP')
             .input('notes', sql.NVarChar(500), notes || '')
-            .query(`INSERT INTO AgentCollections (EmployeeId, AgentId, Date, FromCode, ToCode, AmountCollected, AmountPaid, BoxesQty, Currency, Notes)
+            .query(`INSERT INTO AgentCollections (EmployeeId, AgentId, Date, FromCode, ToCode, AmountCollected, AmountPaid, BankAmount, BoxesQty, Currency, Notes)
                     OUTPUT INSERTED.*
-                    VALUES (@employeeId, @agentId, @date, @fromCode, @toCode, @amountCollected, @amountPaid, @boxesQty, @currency, @notes)`);
+                    VALUES (@employeeId, @agentId, @date, @fromCode, @toCode, @amountCollected, @amountPaid, @bankAmount, @boxesQty, @currency, @notes)`);
         res.status(201).json({ success: true, collection: inserted.recordset[0] });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
@@ -206,7 +207,7 @@ router.post('/agent-collections', authenticateToken, async (req, res) => {
 // PUT update collection record
 router.put('/agent-collections/:id', authenticateToken, async (req, res) => {
     try {
-        const { fromCode, toCode, amountCollected, amountPaid, boxesQty, notes } = req.body;
+        const { fromCode, toCode, amountCollected, amountPaid, bankAmount, boxesQty, notes } = req.body;
         const pool = await req.app.locals.getPool();
         const updated = await pool.request()
             .input('id', sql.Int, req.params.id)
@@ -214,9 +215,10 @@ router.put('/agent-collections/:id', authenticateToken, async (req, res) => {
             .input('toCode', sql.NVarChar(30), toCode || '')
             .input('amountCollected', sql.Decimal(12,2), parseFloat(amountCollected) || 0)
             .input('amountPaid', sql.Decimal(12,2), parseFloat(amountPaid) || 0)
+            .input('bankAmount', sql.Decimal(12,2), parseFloat(bankAmount) || 0)
             .input('boxesQty', sql.Int, parseInt(boxesQty) || 0)
             .input('notes', sql.NVarChar(500), notes || '')
-            .query(`UPDATE AgentCollections SET FromCode=@fromCode, ToCode=@toCode, AmountCollected=@amountCollected, AmountPaid=@amountPaid, BoxesQty=@boxesQty, Notes=@notes, UpdatedAt=GETDATE() OUTPUT INSERTED.* WHERE Id=@id`);
+            .query(`UPDATE AgentCollections SET FromCode=@fromCode, ToCode=@toCode, AmountCollected=@amountCollected, AmountPaid=@amountPaid, BankAmount=@bankAmount, BoxesQty=@boxesQty, Notes=@notes, UpdatedAt=GETDATE() OUTPUT INSERTED.* WHERE Id=@id`);
         if (updated.recordset.length === 0) return res.status(404).json({ success: false, error: 'Record not found' });
         res.json({ success: true, collection: updated.recordset[0] });
     } catch (error) {
