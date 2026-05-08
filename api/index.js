@@ -1,11 +1,10 @@
 const express = require('express');
+const cors = require('cors');
 const sql = require('mssql');
 
 const app = express();
 
-// ============================================
-// CORS — raw headers first, before everything
-// ============================================
+// Raw CORS headers — must be absolute first middleware
 app.use(function(req, res, next) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS,PATCH');
@@ -17,10 +16,8 @@ app.use(function(req, res, next) {
 });
 
 app.use(express.json({ limit: '10mb' }));
+app.use(cors({ origin: '*', credentials: false }));
 
-// ============================================
-// Database Configuration
-// ============================================
 const dbConfig = {
     server: process.env.DB_SERVER,
     port: 1433,
@@ -34,11 +31,7 @@ const dbConfig = {
         trustServerCertificate: true,
         enableArithAbort: true
     },
-    pool: {
-        max: 3,
-        min: 0,
-        idleTimeoutMillis: 30000
-    }
+    pool: { max: 3, min: 0, idleTimeoutMillis: 30000 }
 };
 
 let poolPromise;
@@ -50,9 +43,6 @@ const getPool = async () => {
 };
 app.locals.getPool = getPool;
 
-// ============================================
-// Routes
-// ============================================
 const authRoutes = require('./_routes/auth');
 const employeeRoutes = require('./_routes/employees');
 const locationRoutes = require('./_routes/locations');
@@ -71,9 +61,6 @@ app.use('/api', vehicleRoutes);
 app.use('/api', expenseRoutes);
 app.use('/api', agentRoutes);
 
-// ============================================
-// Health Check
-// ============================================
 app.get('/api/health', async (req, res) => {
     try {
         const pool = await getPool();
