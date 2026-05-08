@@ -11,22 +11,17 @@ const app = express();
 // ============================================
 // Middleware
 // ============================================
-app.use(express.json());
-
-const allowedOrigins = process.env.ALLOWED_ORIGINS 
-    ? process.env.ALLOWED_ORIGINS.split(',')
-    : ['http://localhost:3000', 'https://bpost-employees.netlify.app'];
+app.use(express.json({ limit: '10mb' }));
 
 app.use(cors({
-    origin: function(origin, callback) {
-        if (!origin || allowedOrigins.indexOf(origin) !== -1) {
-            callback(null, true);
-        } else {
-            callback(null, true);
-        }
-    },
-    credentials: true
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+    credentials: false
 }));
+
+// Handle preflight OPTIONS requests explicitly
+app.options('*', cors());
 
 // ============================================
 // Database Configuration
