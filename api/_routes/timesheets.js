@@ -133,12 +133,19 @@ router.post('/timesheets', authenticateToken, async (req, res) => {
             .query("SELECT Id, Status FROM Timesheets WHERE EmployeeId = @dupEmployeeId AND Date = @dupDate");
         if (dupCheck.recordset.length > 0) {
             const existing = dupCheck.recordset[0];
-            // Non-checkedin record already exists — hard block
-            if (existing.Status !== 'checkedin') {
+            // Rejected timesheets — allow fresh check-in by deleting the old record
+            if (existing.Status === 'rejected' && bodyStatus === 'checkedin') {
+                await pool.request()
+                    .input('delId', sql.Int, existing.Id)
+                    .query('DELETE FROM Timesheets WHERE Id = @delId');
+                // Fall through to insert a fresh record below
+            }
+            // Non-checkedin, non-rejected record already exists — hard block
+            else if (existing.Status !== 'checkedin') {
                 return res.status(409).json({ success: false, error: 'A timesheet for this date has already been submitted. Please contact your administrator if you need to make changes.' });
             }
             // checkedin stub exists + full submission arriving — update in place
-            if (existing.Status === 'checkedin' && bodyStatus !== 'checkedin') {
+            else if (existing.Status === 'checkedin' && bodyStatus !== 'checkedin') {
                 const updateReq = pool.request()
                     .input('id', sql.Int, existing.Id)
                     .input('FinishTime', sql.VarChar(10), resolvedCheckOut)
@@ -163,7 +170,9 @@ router.post('/timesheets', authenticateToken, async (req, res) => {
                 return res.status(200).json({ success: true, timesheet: updated.recordset[0], message: 'Timesheet updated from check-in record' });
             }
             // checkedin + another checkedin attempt — block duplicate
-            return res.status(409).json({ success: false, error: 'duplicate_checkedin', existingId: existing.Id });
+            else {
+                return res.status(409).json({ success: false, error: 'duplicate_checkedin', existingId: existing.Id });
+            }
         }
         const request = pool.request()
             .input('employeeId', sql.Int, employeeId)
