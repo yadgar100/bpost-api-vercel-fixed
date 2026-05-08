@@ -125,14 +125,23 @@ router.post('/timesheets', authenticateToken, async (req, res) => {
         if (!date || !resolvedCheckIn)
             return res.status(400).json({ success: false, error: 'Missing required fields: date, startTime' });
 
-        // Prevent duplicate submissions for the same employee on the same date
+        // Prevent duplicate submissions — but allow if existing is just a checkedin stub
         const pool = await req.app.locals.getPool();
         const dupCheck = await pool.request()
             .input('dupEmployeeId', sql.Int, employeeId)
             .input('dupDate', sql.Date, date)
-            .query('SELECT Id FROM Timesheets WHERE EmployeeId = @dupEmployeeId AND Date = @dupDate');
-        if (dupCheck.recordset.length > 0)
-            return res.status(409).json({ success: false, error: 'A timesheet for this date has already been submitted. Please contact your administrator if you need to make changes.' });
+            .query("SELECT Id, Status FROM Timesheets WHERE EmployeeId = @dupEmployeeId AND Date = @dupDate");
+        if (dupCheck.recordset.length > 0) {
+            const existing = dupCheck.recordset[0];
+            // If it's a checkedin stub and this is a full submission, just return the existing id
+            if (existing.Status === 'checkedin' && bodyStatus !== 'checkedin') {
+                // Full submission — update the existing record instead
+                return res.status(409).json({ success: false, error: 'A timesheet for this date has already been submitted. Please contact your administrator if you need to make changes.', existingId: existing.Id });
+            }
+            if (existing.Status !== 'checkedin') {
+                return res.status(409).json({ success: false, error: 'A timesheet for this date has already been submitted. Please contact your administrator if you need to make changes.' });
+            }
+        }
         const request = pool.request()
             .input('employeeId', sql.Int, employeeId)
             .input('date', sql.Date, date)
@@ -168,19 +177,18 @@ router.post('/timesheets', authenticateToken, async (req, res) => {
 
 router.put('/timesheets/:id', authenticateToken, async (req, res) => {
     try {
-        const { status, notes, approvedBy, FinishTime, regularHours, overtimeHours } = req.body;
+        const { status, notes, approvedBy, FinishTime, finishTime, checkOutLocation, regularHours, overtimeHours } = req.body;
         const pool = await req.app.locals.getPool();
         const request = pool.request().input('id', sql.Int, req.params.id);
         const fields = [];
         if (status) {
             fields.push('Status = @status');
             request.input('status', sql.VarChar(20), status);
-            if (status === 'approved') {
-                // ApprovedBy/ApprovedAt columns not in schema
-            }
         }
         if (notes !== undefined) { fields.push('Notes = @notes'); request.input('notes', sql.NVarChar(500), notes); }
-        if (FinishTime) { fields.push('FinishTime = @FinishTime'); request.input('FinishTime', sql.VarChar(10), FinishTime); }
+        const resolvedFinish = FinishTime || finishTime;
+        if (resolvedFinish) { fields.push('FinishTime = @FinishTime'); request.input('FinishTime', sql.VarChar(10), resolvedFinish); }
+        if (checkOutLocation) { fields.push('CheckOutLocation = @checkOutLocation'); request.input('checkOutLocation', sql.NVarChar(200), checkOutLocation); }
         if (regularHours !== undefined) { fields.push('RegularHours = @regularHours'); request.input('regularHours', sql.Decimal(5, 2), regularHours); }
         if (overtimeHours !== undefined) { fields.push('OvertimeHours = @overtimeHours'); request.input('overtimeHours', sql.Decimal(5, 2), overtimeHours); }
         if (req.body.breakMinutes !== undefined) { fields.push('BreakMinutes = @breakMinutes'); request.input('breakMinutes', sql.Int, parseInt(req.body.breakMinutes) || 0); }
