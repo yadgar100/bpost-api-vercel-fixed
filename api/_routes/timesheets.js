@@ -144,6 +144,7 @@ router.post('/timesheets', authenticateToken, async (req, res) => {
             // checkedin record exists — allow the POST to proceed (will update it)
             // Actually return 409 with the existing ID so frontend can PUT instead
             return res.status(409).json({ success: false, error: 'duplicate_checkedin', existingId: existing.Id });
+        }
         const request = pool.request()
             .input('employeeId', sql.Int, employeeId)
             .input('date', sql.Date, date)
