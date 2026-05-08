@@ -133,16 +133,36 @@ router.post('/timesheets', authenticateToken, async (req, res) => {
             .query("SELECT Id, Status FROM Timesheets WHERE EmployeeId = @dupEmployeeId AND Date = @dupDate");
         if (dupCheck.recordset.length > 0) {
             const existing = dupCheck.recordset[0];
-            // If it's a checkedin stub and this is a full submission, just return the existing id
-            if (existing.Status === 'checkedin' && bodyStatus !== 'checkedin') {
-                // Full submission — update the existing record instead
-                return res.status(409).json({ success: false, error: 'A timesheet for this date has already been submitted. Please contact your administrator if you need to make changes.', existingId: existing.Id });
-            }
+            // Non-checkedin record already exists — hard block
             if (existing.Status !== 'checkedin') {
                 return res.status(409).json({ success: false, error: 'A timesheet for this date has already been submitted. Please contact your administrator if you need to make changes.' });
             }
-            // checkedin record exists — allow the POST to proceed (will update it)
-            // Actually return 409 with the existing ID so frontend can PUT instead
+            // checkedin stub exists + full submission arriving — update in place
+            if (existing.Status === 'checkedin' && bodyStatus !== 'checkedin') {
+                const updateReq = pool.request()
+                    .input('id', sql.Int, existing.Id)
+                    .input('FinishTime', sql.VarChar(10), resolvedCheckOut)
+                    .input('regularHours', sql.Decimal(5, 2), regularHours || 0)
+                    .input('overtimeHours', sql.Decimal(5, 2), overtimeHours || 0)
+                    .input('notes', sql.NVarChar(500), notes || '')
+                    .input('status', sql.VarChar(20), bodyStatus || 'pending')
+                    .input('checkOutLocation', sql.NVarChar(200), checkOutLocation || null)
+                    .input('breakMinutes', sql.Int, parseInt(breakMinutes) || 0);
+                const updated = await updateReq.query(`
+                    UPDATE Timesheets
+                    SET FinishTime = @FinishTime,
+                        RegularHours = @regularHours,
+                        OvertimeHours = @overtimeHours,
+                        Notes = @notes,
+                        Status = @status,
+                        CheckOutLocation = @checkOutLocation,
+                        BreakMinutes = @breakMinutes,
+                        UpdatedAt = GETDATE()
+                    OUTPUT INSERTED.*
+                    WHERE Id = @id`);
+                return res.status(200).json({ success: true, timesheet: updated.recordset[0], message: 'Timesheet updated from check-in record' });
+            }
+            // checkedin + another checkedin attempt — block duplicate
             return res.status(409).json({ success: false, error: 'duplicate_checkedin', existingId: existing.Id });
         }
         const request = pool.request()
