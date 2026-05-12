@@ -78,6 +78,34 @@ router.post('/adjustments', authenticateToken, async (req, res) => {
     }
 });
 
+
+// PUT update adjustment (used for approving account_credit_pending → account_credit)
+router.put('/adjustments/:id', authenticateToken, async (req, res) => {
+    try {
+        if (!req.user.isAdmin) return res.status(403).json({ success: false, error: 'Admin access required' });
+        const { type, amount, reason, date, employeeId } = req.body;
+        const pool = await req.app.locals.getPool();
+        const updated = await pool.request()
+            .input('id', sql.Int, req.params.id)
+            .input('type', sql.VarChar(50), type)
+            .input('amount', sql.Decimal(10, 2), parseFloat(amount))
+            .input('reason', sql.NVarChar(500), reason || '')
+            .input('date', sql.Date, date)
+            .query(`
+                UPDATE FinancialAdjustments
+                SET Type = @type, Amount = @amount, Reason = @reason, Date = @date
+                OUTPUT INSERTED.*
+                WHERE Id = @id
+            `);
+        if (updated.recordset.length === 0)
+            return res.status(404).json({ success: false, error: 'Adjustment not found' });
+        res.json({ success: true, adjustment: updated.recordset[0], message: 'Updated successfully' });
+    } catch (error) {
+        console.error('PUT adjustment error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 // DELETE adjustment
 router.delete('/adjustments/:id', authenticateToken, async (req, res) => {
     try {
