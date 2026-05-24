@@ -125,40 +125,6 @@ router.post('/iraq-pay', authenticateToken, async (req, res) => {
     }
 });
 
-// PUT — employee records collection, or admin edits
-router.put('/iraq-pay/:id', authenticateToken, async (req, res) => {
-    try {
-        const { collectedIQD, collectedUSD, collectedGBP, collectedEUR, notes, status, employeeId, amountIQD, amountUSD, amountGBP, amountEUR } = req.body;
-        const pool = await req.app.locals.getPool();
-        const request = pool.request().input('id', sql.Int, req.params.id);
-        const fields = ['UpdatedAt = GETDATE()'];
-
-        if (collectedIQD !== undefined) { fields.push('CollectedIQD = @cIQD'); request.input('cIQD', sql.Decimal(18,2), parseFloat(collectedIQD)||0); }
-        if (collectedUSD !== undefined) { fields.push('CollectedUSD = @cUSD'); request.input('cUSD', sql.Decimal(18,2), parseFloat(collectedUSD)||0); }
-        if (collectedGBP !== undefined) { fields.push('CollectedGBP = @cGBP'); request.input('cGBP', sql.Decimal(18,2), parseFloat(collectedGBP)||0); }
-        if (collectedEUR !== undefined) { fields.push('CollectedEUR = @cEUR'); request.input('cEUR', sql.Decimal(18,2), parseFloat(collectedEUR)||0); }
-        if (notes !== undefined)        { fields.push('Notes = @notes');        request.input('notes', sql.NVarChar(500), notes); }
-        if (status)                     { fields.push('Status = @status');      request.input('status', sql.NVarChar(20), status); }
-        if (employeeId !== undefined)   { fields.push('EmployeeId = @empId');   request.input('empId', sql.Int, parseInt(employeeId)); }
-        if (amountIQD !== undefined)    { fields.push('AmountIQD = @aIQD');     request.input('aIQD', sql.Decimal(18,2), parseFloat(amountIQD)||0); }
-        if (amountUSD !== undefined)    { fields.push('AmountUSD = @aUSD');     request.input('aUSD', sql.Decimal(18,2), parseFloat(amountUSD)||0); }
-        if (amountGBP !== undefined)    { fields.push('AmountGBP = @aGBP');     request.input('aGBP', sql.Decimal(18,2), parseFloat(amountGBP)||0); }
-        if (amountEUR !== undefined)    { fields.push('AmountEUR = @aEUR');     request.input('aEUR', sql.Decimal(18,2), parseFloat(amountEUR)||0); }
-
-        // Auto-set CollectedAt when status becomes collected
-        if (status === 'collected') { fields.push("CollectedAt = GETDATE()"); }
-
-        const updated = await request.query(
-            `UPDATE IraqPayments SET ${fields.join(', ')} OUTPUT INSERTED.* WHERE Id = @id`
-        );
-        if (updated.recordset.length === 0) return res.status(404).json({ success: false, error: 'Not found' });
-        res.json({ success: true, payment: updated.recordset[0] });
-    } catch (error) {
-        console.error('PUT iraq-pay error:', error);
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
-
 // PUT /api/iraq-pay/move-batch — move all pending records from one batch to a new batch name
 router.put('/iraq-pay/move-batch', authenticateToken, async (req, res) => {
     try {
@@ -190,6 +156,41 @@ router.put('/iraq-pay/move-batch', authenticateToken, async (req, res) => {
         res.json({ success: true, moved: result.rowsAffected[0] });
     } catch (error) {
         console.error('move-batch error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+
+// PUT — employee records collection, or admin edits
+router.put('/iraq-pay/:id', authenticateToken, async (req, res) => {
+    try {
+        const { collectedIQD, collectedUSD, collectedGBP, collectedEUR, notes, status, employeeId, amountIQD, amountUSD, amountGBP, amountEUR } = req.body;
+        const pool = await req.app.locals.getPool();
+        const request = pool.request().input('id', sql.Int, req.params.id);
+        const fields = ['UpdatedAt = GETDATE()'];
+
+        if (collectedIQD !== undefined) { fields.push('CollectedIQD = @cIQD'); request.input('cIQD', sql.Decimal(18,2), parseFloat(collectedIQD)||0); }
+        if (collectedUSD !== undefined) { fields.push('CollectedUSD = @cUSD'); request.input('cUSD', sql.Decimal(18,2), parseFloat(collectedUSD)||0); }
+        if (collectedGBP !== undefined) { fields.push('CollectedGBP = @cGBP'); request.input('cGBP', sql.Decimal(18,2), parseFloat(collectedGBP)||0); }
+        if (collectedEUR !== undefined) { fields.push('CollectedEUR = @cEUR'); request.input('cEUR', sql.Decimal(18,2), parseFloat(collectedEUR)||0); }
+        if (notes !== undefined)        { fields.push('Notes = @notes');        request.input('notes', sql.NVarChar(500), notes); }
+        if (status)                     { fields.push('Status = @status');      request.input('status', sql.NVarChar(20), status); }
+        if (employeeId !== undefined)   { fields.push('EmployeeId = @empId');   request.input('empId', sql.Int, parseInt(employeeId)); }
+        if (amountIQD !== undefined)    { fields.push('AmountIQD = @aIQD');     request.input('aIQD', sql.Decimal(18,2), parseFloat(amountIQD)||0); }
+        if (amountUSD !== undefined)    { fields.push('AmountUSD = @aUSD');     request.input('aUSD', sql.Decimal(18,2), parseFloat(amountUSD)||0); }
+        if (amountGBP !== undefined)    { fields.push('AmountGBP = @aGBP');     request.input('aGBP', sql.Decimal(18,2), parseFloat(amountGBP)||0); }
+        if (amountEUR !== undefined)    { fields.push('AmountEUR = @aEUR');     request.input('aEUR', sql.Decimal(18,2), parseFloat(amountEUR)||0); }
+
+        // Auto-set CollectedAt when status becomes collected
+        if (status === 'collected') { fields.push("CollectedAt = GETDATE()"); }
+
+        const updated = await request.query(
+            `UPDATE IraqPayments SET ${fields.join(', ')} OUTPUT INSERTED.* WHERE Id = @id`
+        );
+        if (updated.recordset.length === 0) return res.status(404).json({ success: false, error: 'Not found' });
+        res.json({ success: true, payment: updated.recordset[0] });
+    } catch (error) {
+        console.error('PUT iraq-pay error:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
