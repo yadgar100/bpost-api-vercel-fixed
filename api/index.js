@@ -51,6 +51,7 @@ const adjustmentRoutes = require('./_routes/adjustments');
 const vehicleRoutes = require('./_routes/vehicles');
 const expenseRoutes = require('./_routes/expenses');
 const agentRoutes = require('./_routes/agents');
+const iraqPayRoutes = require('./_routes/iraqpay');
 
 app.use('/api', authRoutes);
 app.use('/api', employeeRoutes);
@@ -60,6 +61,7 @@ app.use('/api', adjustmentRoutes);
 app.use('/api', vehicleRoutes);
 app.use('/api', expenseRoutes);
 app.use('/api', agentRoutes);
+app.use('/api', iraqPayRoutes);
 
 app.get('/api/health', async (req, res) => {
     try {
