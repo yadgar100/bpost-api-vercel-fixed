@@ -104,23 +104,34 @@ router.post('/iraq-pay/batch', authenticateToken, async (req, res) => {
 router.post('/iraq-pay', authenticateToken, async (req, res) => {
     try {
         if (!req.user.isAdmin) return res.status(403).json({ success: false, error: 'Admin only' });
-        const { batchName, shipmentCode, employeeId, amountIQD, amountUSD, amountGBP, amountEUR, notes } = req.body;
+        const { batchName, shipmentCode, employeeId, amountIQD, amountUSD, amountGBP, amountEUR, notes, receiverContact, toOffice } = req.body;
+        if (!shipmentCode || !shipmentCode.trim()) return res.status(400).json({ success: false, error: 'Shipment code is required' });
+        if (!employeeId)                            return res.status(400).json({ success: false, error: 'Employee is required' });
+        if (!batchName  || !batchName.trim())       return res.status(400).json({ success: false, error: 'Batch name is required' });
+
+        // Build notes with office prefix to mirror batch-upload behaviour
+        const office = (toOffice || '').trim();
+        const userNote = (notes || '').trim();
+        const combinedNotes = (office ? 'Office: ' + office : '') + (userNote ? (office ? ' | ' : '') + userNote : '');
+
         const pool = await req.app.locals.getPool();
         const result = await pool.request()
-            .input('batchName',    sql.NVarChar(200),  batchName || 'Manual')
-            .input('shipmentCode', sql.NVarChar(100),  shipmentCode || '')
-            .input('employeeId',   sql.Int,            parseInt(employeeId))
-            .input('amtIQD',       sql.Decimal(18,2),  parseFloat(amountIQD)  || 0)
-            .input('amtUSD',       sql.Decimal(18,2),  parseFloat(amountUSD)  || 0)
-            .input('amtGBP',       sql.Decimal(18,2),  parseFloat(amountGBP)  || 0)
-            .input('amtEUR',       sql.Decimal(18,2),  parseFloat(amountEUR)  || 0)
-            .input('notes',        sql.NVarChar(500),  notes || '')
+            .input('batchName',       sql.NVarChar(200),  batchName.trim())
+            .input('shipmentCode',    sql.NVarChar(100),  shipmentCode.trim())
+            .input('employeeId',      sql.Int,            parseInt(employeeId))
+            .input('amtIQD',          sql.Decimal(18,2),  parseFloat(amountIQD)  || 0)
+            .input('amtUSD',          sql.Decimal(18,2),  parseFloat(amountUSD)  || 0)
+            .input('amtGBP',          sql.Decimal(18,2),  parseFloat(amountGBP)  || 0)
+            .input('amtEUR',          sql.Decimal(18,2),  parseFloat(amountEUR)  || 0)
+            .input('receiverContact', sql.NVarChar(100),  receiverContact || '')
+            .input('notes',           sql.NVarChar(500),  combinedNotes)
             .query(`INSERT INTO IraqPayments
-                (BatchName, ShipmentCode, EmployeeId, AmountIQD, AmountUSD, AmountGBP, AmountEUR, Notes)
+                (BatchName, ShipmentCode, EmployeeId, AmountIQD, AmountUSD, AmountGBP, AmountEUR, ReceiverContact, Notes)
                 OUTPUT INSERTED.*
-                VALUES (@batchName, @shipmentCode, @employeeId, @amtIQD, @amtUSD, @amtGBP, @amtEUR, @notes)`);
+                VALUES (@batchName, @shipmentCode, @employeeId, @amtIQD, @amtUSD, @amtGBP, @amtEUR, @receiverContact, @notes)`);
         res.status(201).json({ success: true, payment: result.recordset[0] });
     } catch (error) {
+        console.error('POST iraq-pay error:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
