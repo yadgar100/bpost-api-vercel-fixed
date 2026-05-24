@@ -163,13 +163,15 @@ router.put('/iraq-pay/:id', authenticateToken, async (req, res) => {
 router.put('/iraq-pay/move-batch', authenticateToken, async (req, res) => {
     try {
         if (!req.user.isAdmin && req.user.isAdmin != 1) return res.status(403).json({ success: false, error: 'Admin only' });
-        const { fromBatch, newBatchName, employeeId } = req.body;
+        const { fromBatch, newBatchName, employeeId, newEmployeeId } = req.body;
         if (!fromBatch || !newBatchName) return res.status(400).json({ success: false, error: 'fromBatch and newBatchName required' });
+        if (!newEmployeeId) return res.status(400).json({ success: false, error: 'newEmployeeId is required — assign the batch to an employee' });
 
         const pool = await req.app.locals.getPool();
         const request = pool.request();
-        request.input('fromBatch',    sql.NVarChar(200), fromBatch);
-        request.input('newBatchName', sql.NVarChar(200), newBatchName);
+        request.input('fromBatch',     sql.NVarChar(200), fromBatch);
+        request.input('newBatchName',  sql.NVarChar(200), newBatchName);
+        request.input('newEmployeeId', sql.Int,           parseInt(newEmployeeId));
 
         let where = `BatchName = @fromBatch AND Status = 'pending'`;
         if (employeeId) {
@@ -181,6 +183,7 @@ router.put('/iraq-pay/move-batch', authenticateToken, async (req, res) => {
             UPDATE IraqPayments
             SET OldBatchName = BatchName,
                 BatchName    = @newBatchName,
+                EmployeeId   = @newEmployeeId,
                 UpdatedAt    = GETDATE()
             WHERE ${where}
         `);
