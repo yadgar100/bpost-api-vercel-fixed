@@ -94,15 +94,23 @@ router.get('/agent-collections/my', auth, async (req, res) => {
 router.post('/agent-collections', auth, async (req, res) => {
     try {
         const {
-            employeeId, agentId, date,
+            agentId, date,
             fromCode, toCode,
             amountCollected, amountPaid, bankAmount,
             boxesQty, notes, currency
         } = req.body;
 
-        if (!employeeId) return res.status(400).json({ success: false, error: 'employeeId is required' });
-        if (!agentId)    return res.status(400).json({ success: false, error: 'agentId is required' });
-        if (!date)       return res.status(400).json({ success: false, error: 'date is required' });
+        // For employees, ALWAYS use their own JWT id. Admins can specify any employeeId.
+        let employeeId;
+        if (req.user.isAdmin == true || req.user.isAdmin == 1) {
+            employeeId = req.body.employeeId;
+            if (!employeeId) return res.status(400).json({ success: false, error: 'employeeId is required (admin)' });
+        } else {
+            employeeId = req.user.id;
+        }
+
+        if (!agentId) return res.status(400).json({ success: false, error: 'agentId is required' });
+        if (!date)    return res.status(400).json({ success: false, error: 'date is required' });
 
         const pool = await req.app.locals.getPool();
         const result = await pool.request()
@@ -157,6 +165,18 @@ router.put('/agent-collections/:id', auth, async (req, res) => {
         } = req.body;
 
         const pool = await req.app.locals.getPool();
+        const isAdmin = (req.user.isAdmin == true || req.user.isAdmin == 1);
+
+        // Non-admin must own the record they're editing
+        if (!isAdmin) {
+            const own = await pool.request()
+                .input('id',    sql.Int, parseInt(req.params.id))
+                .input('empId', sql.Int, req.user.id)
+                .query('SELECT EmployeeId FROM AgentCollections WHERE Id = @id');
+            if (!own.recordset.length)                          return res.status(404).json({ success: false, error: 'Record not found' });
+            if (own.recordset[0].EmployeeId !== req.user.id)    return res.status(403).json({ success: false, error: 'You can only edit your own records' });
+        }
+
         const request = pool.request().input('id', sql.Int, parseInt(req.params.id));
         const fields = ['UpdatedAt = GETDATE()'];
 
@@ -167,10 +187,15 @@ router.put('/agent-collections/:id', auth, async (req, res) => {
         if (bankAmount      !== undefined) { fields.push('BankAmount = @bankAmount');           request.input('bankAmount',      sql.Decimal(18,2), parseFloat(bankAmount)||0); }
         if (boxesQty        !== undefined) { fields.push('BoxesQty = @boxesQty');               request.input('boxesQty',        sql.Int,           parseInt(boxesQty)||0); }
         if (notes           !== undefined) { fields.push('Notes = @notes');                     request.input('notes',           sql.NVarChar(500), notes); }
-        if (employeeId      !== undefined) { fields.push('EmployeeId = @employeeId');           request.input('employeeId',      sql.Int,           parseInt(employeeId)); }
         if (agentId         !== undefined) { fields.push('AgentId = @agentId');                 request.input('agentId',         sql.Int,           parseInt(agentId)); }
         if (date            !== undefined) { fields.push('Date = @date');                       request.input('date',            sql.Date,          new Date(date)); }
         if (currency        !== undefined) { fields.push('Currency = @currency');               request.input('currency',        sql.NVarChar(10),  currency); }
+
+        // Only admin may reassign to another employee
+        if (isAdmin && employeeId !== undefined) {
+            fields.push('EmployeeId = @employeeId');
+            request.input('employeeId', sql.Int, parseInt(employeeId));
+        }
 
         const updated = await request.query(
             `UPDATE AgentCollections SET ${fields.join(', ')} OUTPUT INSERTED.* WHERE Id = @id`
