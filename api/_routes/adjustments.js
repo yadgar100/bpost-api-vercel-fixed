@@ -30,7 +30,7 @@ router.get('/adjustments', authenticateToken, async (req, res) => {
                 SELECT FA.Id, FA.EmployeeId, FA.Type, FA.Amount, FA.Reason, FA.Date, FA.Hours, FA.CreatedBy, FA.CreatedAt,
                        E.FirstName, E.LastName, E.EmployeeId AS EmployeeCode
                 FROM FinancialAdjustments FA
-                INNER JOIN Employees E ON FA.EmployeeId = E.Id
+                LEFT JOIN Employees E ON FA.EmployeeId = E.Id
                 ORDER BY FA.CreatedAt DESC`;
         } else {
             request.input('empId', sql.Int, req.user.id);
@@ -38,7 +38,7 @@ router.get('/adjustments', authenticateToken, async (req, res) => {
                 SELECT FA.Id, FA.EmployeeId, FA.Type, FA.Amount, FA.Reason, FA.Date, FA.Hours, FA.CreatedBy, FA.CreatedAt,
                        E.FirstName, E.LastName, E.EmployeeId AS EmployeeCode
                 FROM FinancialAdjustments FA
-                INNER JOIN Employees E ON FA.EmployeeId = E.Id
+                LEFT JOIN Employees E ON FA.EmployeeId = E.Id
                 WHERE FA.EmployeeId = @empId
                 ORDER BY FA.CreatedAt DESC`;
         }
