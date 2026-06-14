@@ -175,7 +175,7 @@ router.put('/iraq-pay/move-batch', authenticateToken, async (req, res) => {
 // PUT — employee records collection, or admin edits
 router.put('/iraq-pay/:id', authenticateToken, async (req, res) => {
     try {
-        const { collectedIQD, collectedUSD, collectedGBP, collectedEUR, notes, status, employeeId, amountIQD, amountUSD, amountGBP, amountEUR } = req.body;
+        const { collectedIQD, collectedUSD, collectedGBP, collectedEUR, notes, status, employeeId, batchName, amountIQD, amountUSD, amountGBP, amountEUR } = req.body;
         const pool = await req.app.locals.getPool();
         const request = pool.request().input('id', sql.Int, req.params.id);
         const fields = ['UpdatedAt = GETDATE()'];
@@ -187,6 +187,7 @@ router.put('/iraq-pay/:id', authenticateToken, async (req, res) => {
         if (notes !== undefined)        { fields.push('Notes = @notes');        request.input('notes', sql.NVarChar(500), notes); }
         if (status)                     { fields.push('Status = @status');      request.input('status', sql.NVarChar(20), status); }
         if (employeeId !== undefined)   { fields.push('EmployeeId = @empId');   request.input('empId', sql.Int, parseInt(employeeId)); }
+        if (batchName !== undefined && batchName !== null && String(batchName).trim() !== '') { fields.push('BatchName = @batchName'); request.input('batchName', sql.NVarChar(200), String(batchName).trim()); }
         if (amountIQD !== undefined)    { fields.push('AmountIQD = @aIQD');     request.input('aIQD', sql.Decimal(18,2), parseFloat(amountIQD)||0); }
         if (amountUSD !== undefined)    { fields.push('AmountUSD = @aUSD');     request.input('aUSD', sql.Decimal(18,2), parseFloat(amountUSD)||0); }
         if (amountGBP !== undefined)    { fields.push('AmountGBP = @aGBP');     request.input('aGBP', sql.Decimal(18,2), parseFloat(amountGBP)||0); }
