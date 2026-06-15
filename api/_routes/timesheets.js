@@ -256,7 +256,16 @@ router.post('/timesheets/:id/approve', authenticateToken, async (req, res) => {
             .query(`UPDATE Timesheets SET Status='approved', UpdatedAt=GETDATE() OUTPUT INSERTED.* WHERE Id=@id`);
         if (approved.recordset.length === 0)
             return res.status(404).json({ success: false, error: 'Timesheet not found' });
-        res.json({ success: true, timesheet: approved.recordset[0], message: 'Approved' });
+        const ts = approved.recordset[0];
+        // Clean up any orphaned checkedin stub for the same employee+date.
+        // These are left behind when checkout creates a new pending row instead of
+        // updating the checkedin one in place (race condition / manual admin entry).
+        await pool.request()
+            .input('cleanEmpId', sql.Int, ts.EmployeeId)
+            .input('cleanDate', sql.Date, ts.Date)
+            .input('cleanId', sql.Int, ts.Id)
+            .query(`DELETE FROM Timesheets WHERE EmployeeId=@cleanEmpId AND Date=@cleanDate AND Status='checkedin' AND Id!=@cleanId`);
+        res.json({ success: true, timesheet: ts, message: 'Approved' });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
