@@ -130,8 +130,10 @@ router.post('/timesheets', authenticateToken, async (req, res) => {
         const dupCheck = await pool.request()
             .input('dupEmployeeId', sql.Int, employeeId)
             .input('dupDate', sql.Date, date)
-            .query("SELECT Id, Status FROM Timesheets WHERE EmployeeId = @dupEmployeeId AND Date = @dupDate");
+            .query("SELECT Id, Status FROM Timesheets WHERE EmployeeId = @dupEmployeeId AND Date = @dupDate ORDER BY CASE Status WHEN 'approved' THEN 1 WHEN 'pending' THEN 2 WHEN 'checkedout' THEN 3 WHEN 'checkedin' THEN 4 ELSE 5 END");
         if (dupCheck.recordset.length > 0) {
+            // Pick the most-advanced existing record (approved > pending > checkedout > checkedin)
+            // so a stray duplicate checkedin can't mask an already-submitted timesheet.
             const existing = dupCheck.recordset[0];
             // Rejected timesheets — allow fresh check-in by deleting the old record
             if (existing.Status === 'rejected' && bodyStatus === 'checkedin') {
@@ -192,14 +194,25 @@ router.post('/timesheets', authenticateToken, async (req, res) => {
             request.input('locationId', sql.Int, locationId);
             insertQuery = `INSERT INTO Timesheets (EmployeeId, LocationId, Date, StartTime, FinishTime, RegularHours, OvertimeHours, Notes, Status, CheckInLocation, CheckOutLocation, BreakMinutes)
                            OUTPUT INSERTED.*
-                           VALUES (@employeeId, @locationId, @date, @StartTime, @FinishTime, @regularHours, @overtimeHours, @notes, @status, @checkInLocation, @checkOutLocation, @breakMinutes)`;
+                           SELECT @employeeId, @locationId, @date, @StartTime, @FinishTime, @regularHours, @overtimeHours, @notes, @status, @checkInLocation, @checkOutLocation, @breakMinutes
+                           WHERE NOT EXISTS (SELECT 1 FROM Timesheets WITH (UPDLOCK, HOLDLOCK) WHERE EmployeeId = @employeeId AND Date = @date AND Status <> 'rejected')`;
         } else {
             insertQuery = `INSERT INTO Timesheets (EmployeeId, Date, StartTime, FinishTime, RegularHours, OvertimeHours, Notes, Status, CheckInLocation, CheckOutLocation, BreakMinutes)
                            OUTPUT INSERTED.*
-                           VALUES (@employeeId, @date, @StartTime, @FinishTime, @regularHours, @overtimeHours, @notes, @status, @checkInLocation, @checkOutLocation, @breakMinutes)`;
+                           SELECT @employeeId, @date, @StartTime, @FinishTime, @regularHours, @overtimeHours, @notes, @status, @checkInLocation, @checkOutLocation, @breakMinutes
+                           WHERE NOT EXISTS (SELECT 1 FROM Timesheets WITH (UPDLOCK, HOLDLOCK) WHERE EmployeeId = @employeeId AND Date = @date AND Status <> 'rejected')`;
         }
 
         const inserted = await request.query(insertQuery);
+        // If the guard blocked the insert (a concurrent request won the race), return the
+        // existing record instead of creating a duplicate.
+        if (!inserted.recordset || inserted.recordset.length === 0) {
+            const existingNow = await pool.request()
+                .input('eEmployeeId', sql.Int, employeeId)
+                .input('eDate', sql.Date, date)
+                .query("SELECT TOP 1 * FROM Timesheets WHERE EmployeeId = @eEmployeeId AND Date = @eDate AND Status <> 'rejected' ORDER BY CASE Status WHEN 'approved' THEN 1 WHEN 'pending' THEN 2 WHEN 'checkedout' THEN 3 WHEN 'checkedin' THEN 4 ELSE 5 END");
+            return res.status(200).json({ success: true, timesheet: existingNow.recordset[0], message: 'Existing record returned (duplicate prevented)' });
+        }
         res.status(201).json({ success: true, timesheet: inserted.recordset[0], message: 'Timesheet created successfully' });
     } catch (error) {
         console.error('POST timesheet error:', error);
