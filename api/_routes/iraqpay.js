@@ -188,6 +188,9 @@ router.put('/iraq-pay/:id', authenticateToken, async (req, res) => {
         if (status)                     { fields.push('Status = @status');      request.input('status', sql.NVarChar(20), status); }
         if (employeeId !== undefined)   { fields.push('EmployeeId = @empId');   request.input('empId', sql.Int, parseInt(employeeId)); }
         if (batchName !== undefined && batchName !== null && String(batchName).trim() !== '') { fields.push('BatchName = @batchName'); request.input('batchName', sql.NVarChar(200), String(batchName).trim()); }
+        // When the frontend sends oldBatchName (set during individual reassign), persist it.
+        const { oldBatchName } = req.body;
+        if (oldBatchName !== undefined && oldBatchName !== null && String(oldBatchName).trim() !== '') { fields.push('OldBatchName = @oldBatchName'); request.input('oldBatchName', sql.NVarChar(200), String(oldBatchName).trim()); }
         if (amountIQD !== undefined)    { fields.push('AmountIQD = @aIQD');     request.input('aIQD', sql.Decimal(18,2), parseFloat(amountIQD)||0); }
         if (amountUSD !== undefined)    { fields.push('AmountUSD = @aUSD');     request.input('aUSD', sql.Decimal(18,2), parseFloat(amountUSD)||0); }
         if (amountGBP !== undefined)    { fields.push('AmountGBP = @aGBP');     request.input('aGBP', sql.Decimal(18,2), parseFloat(amountGBP)||0); }
