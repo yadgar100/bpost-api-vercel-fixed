@@ -27,7 +27,7 @@ router.get('/timesheets', authenticateToken, async (req, res) => {
         if (req.user.isAdmin == true || req.user.isAdmin == 1) {
             query = `
                 SELECT T.Id, T.EmployeeId, T.LocationId, T.CheckInLocation, T.CheckOutLocation, T.BreakMinutes, T.Date, T.StartTime, T.FinishTime,
-                       T.RegularHours, T.OvertimeHours, T.Status, T.Notes, T.CreatedAt, T.UpdatedAt,
+                       T.RegularHours, T.OvertimeHours, T.HourlyRate, T.OvertimeRate, T.Status, T.Notes, T.CreatedAt, T.UpdatedAt,
                        E.FirstName, E.LastName, E.EmployeeId AS EmployeeCode, L.Name AS LocationName
                 FROM Timesheets T
                 INNER JOIN Employees E ON T.EmployeeId = E.Id
@@ -37,7 +37,7 @@ router.get('/timesheets', authenticateToken, async (req, res) => {
             request.input('empId', sql.Int, req.user.id);
             query = `
                 SELECT T.Id, T.EmployeeId, T.LocationId, T.CheckInLocation, T.CheckOutLocation, T.BreakMinutes, T.Date, T.StartTime, T.FinishTime,
-                       T.RegularHours, T.OvertimeHours, T.Status, T.Notes, T.CreatedAt, T.UpdatedAt,
+                       T.RegularHours, T.OvertimeHours, T.HourlyRate, T.OvertimeRate, T.Status, T.Notes, T.CreatedAt, T.UpdatedAt,
                        E.FirstName, E.LastName, E.EmployeeId AS EmployeeCode, L.Name AS LocationName
                 FROM Timesheets T
                 INNER JOIN Employees E ON T.EmployeeId = E.Id
@@ -58,7 +58,7 @@ router.get('/timesheets/pending', authenticateToken, async (req, res) => {
         const pool = await req.app.locals.getPool();
         const rows = await pool.request().query(`
             SELECT T.Id, T.EmployeeId, T.LocationId, T.CheckInLocation, T.CheckOutLocation, T.BreakMinutes, T.Date, T.StartTime, T.FinishTime,
-                   T.RegularHours, T.OvertimeHours, T.Status, T.Notes, T.CreatedAt,
+                   T.RegularHours, T.OvertimeHours, T.HourlyRate, T.OvertimeRate, T.Status, T.Notes, T.CreatedAt,
                    E.FirstName, E.LastName, E.EmployeeId AS EmployeeCode, L.Name AS LocationName
             FROM Timesheets T
             INNER JOIN Employees E ON T.EmployeeId = E.Id
@@ -78,7 +78,7 @@ router.get('/timesheets/employee/:employeeId', authenticateToken, async (req, re
             .input('employeeId', sql.Int, req.params.employeeId)
             .query(`
                 SELECT T.Id, T.EmployeeId, T.LocationId, T.CheckInLocation, T.CheckOutLocation, T.BreakMinutes, T.Date, T.StartTime, T.FinishTime,
-                       T.RegularHours, T.OvertimeHours, T.Status, T.Notes, T.CreatedAt, L.Name AS LocationName
+                       T.RegularHours, T.OvertimeHours, T.HourlyRate, T.OvertimeRate, T.Status, T.Notes, T.CreatedAt, L.Name AS LocationName
                 FROM Timesheets T
                 LEFT JOIN WorkLocations L ON T.LocationId = L.Id
                 WHERE T.EmployeeId = @employeeId
@@ -96,7 +96,7 @@ router.get('/timesheets/:id', authenticateToken, async (req, res) => {
             .input('id', sql.Int, req.params.id)
             .query(`
                 SELECT T.Id, T.EmployeeId, T.LocationId, T.CheckInLocation, T.CheckOutLocation, T.BreakMinutes, T.Date, T.StartTime, T.FinishTime,
-                       T.RegularHours, T.OvertimeHours, T.Status, T.Notes, T.CreatedAt,
+                       T.RegularHours, T.OvertimeHours, T.HourlyRate, T.OvertimeRate, T.Status, T.Notes, T.CreatedAt,
                        E.FirstName, E.LastName, E.EmployeeId AS EmployeeCode, L.Name AS LocationName
                 FROM Timesheets T
                 INNER JOIN Employees E ON T.EmployeeId = E.Id
@@ -148,6 +148,14 @@ router.post('/timesheets', authenticateToken, async (req, res) => {
             }
             // checkedin stub exists + full submission arriving — update in place
             else if (existing.Status === 'checkedin' && bodyStatus !== 'checkedin') {
+                // Stamp the employee's CURRENT rate onto this shift right now, at the moment its
+                // hours are actually computed. This locks the rate to the shift permanently — a
+                // future rate change will never retroactively re-price it. Only stamps if not
+                // already stamped (idempotent / safe if this path somehow runs twice).
+                const empRateRes = await pool.request()
+                    .input('rateEmpId', sql.Int, employeeId)
+                    .query('SELECT HourlyRate, OvertimeRate FROM Employees WHERE Id = @rateEmpId');
+                const empRate = empRateRes.recordset[0] || {};
                 const updateReq = pool.request()
                     .input('id', sql.Int, existing.Id)
                     .input('FinishTime', sql.VarChar(10), resolvedCheckOut)
@@ -156,7 +164,9 @@ router.post('/timesheets', authenticateToken, async (req, res) => {
                     .input('notes', sql.NVarChar(500), notes || '')
                     .input('status', sql.VarChar(20), bodyStatus || 'pending')
                     .input('checkOutLocation', sql.NVarChar(200), checkOutLocation || null)
-                    .input('breakMinutes', sql.Int, parseInt(breakMinutes) || 0);
+                    .input('breakMinutes', sql.Int, parseInt(breakMinutes) || 0)
+                    .input('currentRate', sql.Decimal(10, 2), empRate.HourlyRate || 0)
+                    .input('currentOtRate', sql.Decimal(5, 2), empRate.OvertimeRate != null ? empRate.OvertimeRate : null);
                 const updated = await updateReq.query(`
                     UPDATE Timesheets
                     SET FinishTime = @FinishTime,
@@ -166,6 +176,8 @@ router.post('/timesheets', authenticateToken, async (req, res) => {
                         Status = @status,
                         CheckOutLocation = @checkOutLocation,
                         BreakMinutes = @breakMinutes,
+                        HourlyRate = CASE WHEN HourlyRate IS NULL THEN @currentRate ELSE HourlyRate END,
+                        OvertimeRate = CASE WHEN OvertimeRate IS NULL THEN @currentOtRate ELSE OvertimeRate END,
                         UpdatedAt = GETDATE()
                     OUTPUT INSERTED.*
                     WHERE Id = @id`);
@@ -176,6 +188,21 @@ router.post('/timesheets', authenticateToken, async (req, res) => {
                 return res.status(409).json({ success: false, error: 'duplicate_checkedin', existingId: existing.Id });
             }
         }
+        // Stamp the employee's rate now IF this insert represents real, already-computed hours
+        // (a direct/manual submission) — not for a bare check-in stub (bodyStatus === 'checkedin'
+        // with placeholder 0 hours), where the rate should instead be captured later at checkout,
+        // the moment the shift's actual hours are known.
+        const isRealSubmission = bodyStatus !== 'checkedin';
+        let stampRate = null, stampOtRate = null;
+        if (isRealSubmission) {
+            const empRateRes = await pool.request()
+                .input('rateEmpId', sql.Int, employeeId)
+                .query('SELECT HourlyRate, OvertimeRate FROM Employees WHERE Id = @rateEmpId');
+            const empRate = empRateRes.recordset[0] || {};
+            stampRate = empRate.HourlyRate || 0;
+            stampOtRate = empRate.OvertimeRate != null ? empRate.OvertimeRate : null;
+        }
+
         const request = pool.request()
             .input('employeeId', sql.Int, employeeId)
             .input('date', sql.Date, date)
@@ -187,19 +214,21 @@ router.post('/timesheets', authenticateToken, async (req, res) => {
             .input('status', sql.VarChar(20), bodyStatus || 'pending')
             .input('checkInLocation', sql.NVarChar(200), checkInLocation || null)
             .input('checkOutLocation', sql.NVarChar(200), checkOutLocation || null)
-            .input('breakMinutes', sql.Int, parseInt(breakMinutes) || 0);
+            .input('breakMinutes', sql.Int, parseInt(breakMinutes) || 0)
+            .input('hourlyRateStamp', sql.Decimal(10, 2), stampRate)
+            .input('overtimeRateStamp', sql.Decimal(5, 2), stampOtRate);
 
         let insertQuery;
         if (locationId) {
             request.input('locationId', sql.Int, locationId);
-            insertQuery = `INSERT INTO Timesheets (EmployeeId, LocationId, Date, StartTime, FinishTime, RegularHours, OvertimeHours, Notes, Status, CheckInLocation, CheckOutLocation, BreakMinutes)
+            insertQuery = `INSERT INTO Timesheets (EmployeeId, LocationId, Date, StartTime, FinishTime, RegularHours, OvertimeHours, HourlyRate, OvertimeRate, Notes, Status, CheckInLocation, CheckOutLocation, BreakMinutes)
                            OUTPUT INSERTED.*
-                           SELECT @employeeId, @locationId, @date, @StartTime, @FinishTime, @regularHours, @overtimeHours, @notes, @status, @checkInLocation, @checkOutLocation, @breakMinutes
+                           SELECT @employeeId, @locationId, @date, @StartTime, @FinishTime, @regularHours, @overtimeHours, @hourlyRateStamp, @overtimeRateStamp, @notes, @status, @checkInLocation, @checkOutLocation, @breakMinutes
                            WHERE NOT EXISTS (SELECT 1 FROM Timesheets WITH (UPDLOCK, HOLDLOCK) WHERE EmployeeId = @employeeId AND Date = @date AND Status <> 'rejected')`;
         } else {
-            insertQuery = `INSERT INTO Timesheets (EmployeeId, Date, StartTime, FinishTime, RegularHours, OvertimeHours, Notes, Status, CheckInLocation, CheckOutLocation, BreakMinutes)
+            insertQuery = `INSERT INTO Timesheets (EmployeeId, Date, StartTime, FinishTime, RegularHours, OvertimeHours, HourlyRate, OvertimeRate, Notes, Status, CheckInLocation, CheckOutLocation, BreakMinutes)
                            OUTPUT INSERTED.*
-                           SELECT @employeeId, @date, @StartTime, @FinishTime, @regularHours, @overtimeHours, @notes, @status, @checkInLocation, @checkOutLocation, @breakMinutes
+                           SELECT @employeeId, @date, @StartTime, @FinishTime, @regularHours, @overtimeHours, @hourlyRateStamp, @overtimeRateStamp, @notes, @status, @checkInLocation, @checkOutLocation, @breakMinutes
                            WHERE NOT EXISTS (SELECT 1 FROM Timesheets WITH (UPDLOCK, HOLDLOCK) WHERE EmployeeId = @employeeId AND Date = @date AND Status <> 'rejected')`;
         }
 
@@ -237,6 +266,26 @@ router.put('/timesheets/:id', authenticateToken, async (req, res) => {
         if (regularHours !== undefined) { fields.push('RegularHours = @regularHours'); request.input('regularHours', sql.Decimal(5, 2), regularHours); }
         if (overtimeHours !== undefined) { fields.push('OvertimeHours = @overtimeHours'); request.input('overtimeHours', sql.Decimal(5, 2), overtimeHours); }
         if (req.body.breakMinutes !== undefined) { fields.push('BreakMinutes = @breakMinutes'); request.input('breakMinutes', sql.Int, parseInt(req.body.breakMinutes) || 0); }
+        // Whenever hours are being written here (QR checkout, "Fix clock-out", manual hour edits),
+        // stamp the employee's CURRENT rate onto the shift — but ONLY if it isn't already stamped.
+        // This is what locks a shift's pay to the rate in effect when it was actually worked, so a
+        // later rate change never retroactively re-prices it. Approve/reject-only calls (no hours
+        // in the body) don't touch this at all, leaving whatever was already stamped untouched.
+        if (regularHours !== undefined || overtimeHours !== undefined) {
+            const tsEmpRes = await pool.request()
+                .input('lookupId', sql.Int, req.params.id)
+                .query('SELECT EmployeeId FROM Timesheets WHERE Id = @lookupId');
+            if (tsEmpRes.recordset.length > 0) {
+                const empRateRes = await pool.request()
+                    .input('rateEmpId', sql.Int, tsEmpRes.recordset[0].EmployeeId)
+                    .query('SELECT HourlyRate, OvertimeRate FROM Employees WHERE Id = @rateEmpId');
+                const empRate = empRateRes.recordset[0] || {};
+                request.input('currentRate', sql.Decimal(10, 2), empRate.HourlyRate || 0);
+                request.input('currentOtRate', sql.Decimal(5, 2), empRate.OvertimeRate != null ? empRate.OvertimeRate : null);
+                fields.push('HourlyRate = CASE WHEN HourlyRate IS NULL THEN @currentRate ELSE HourlyRate END');
+                fields.push('OvertimeRate = CASE WHEN OvertimeRate IS NULL THEN @currentOtRate ELSE OvertimeRate END');
+            }
+        }
         fields.push('UpdatedAt = GETDATE()');
         const updated = await request.query(`UPDATE Timesheets SET ${fields.join(', ')} OUTPUT INSERTED.* WHERE Id = @id`);
         if (updated.recordset.length === 0)
